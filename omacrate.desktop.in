@@ -1,0 +1,23 @@
+[Desktop Entry]
+Type=Application
+Name=Omacrate
+GenericName=Music Player
+Comment=Search and play your Plex music library
+Exec=@@OMACRATE_CLI@@ panel
+Icon=applications-multimedia
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+Keywords=plex;music;player;omacrate;
+Actions=toggle;next;stop;
+
+[Desktop Action toggle]
+Name=Play or pause
+Exec=@@OMACRATE_CLI@@ toggle
+
+[Desktop Action next]
+Name=Next track
+Exec=@@OMACRATE_CLI@@ next
+
+[Desktop Action stop]
+Name=Stop
+Exec=@@OMACRATE_CLI@@ stop

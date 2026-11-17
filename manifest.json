@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.sette7blo.omacrate",
+  "name": "Omacrate for Plex",
+  "version": "0.1.0",
+  "author": "sette7blo",
+  "license": "MIT",
+  "description": "Plays your Plex music library from the bar: one search box, one list, one headless mpv. No visualiser, no polling, nothing running while idle.",
+  "homepage": "https://github.com/sette7blo/omacrate",
+  "funding": { "monero": "42iX2Knyef7Wi4rZxcWMw84DY7x1HUk67LKCqiqB1r5eLicJFvGbpCzUSiAqV8rGzbPW6yzmSGE93ZikU3PUkwnvQopggMB" },
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Omacrate",
+    "description": "The track that is playing from your Plex music library, with a panel to search, browse and queue. Dimmed while nothing plays.",
+    "category": "Media",
+    "aliases": [
+      "omacrate",
+      "plex",
+      "music",
+      "player"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
