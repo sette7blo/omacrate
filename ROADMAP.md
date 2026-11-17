@@ -2,20 +2,16 @@
 
 ## Where we are
 
-First working version, built 2026-11-17, not yet on GitHub and not released. The CLI
-(login by code, search, browse, play through a headless mpv, playlists, Lidarr, DJ) is
-covered by tests against a stand-in server. Linked to a real server since 2026-11-17;
-the panel (tabs, settings, Plex Home user switch) has had only a first look.
+v0.1.0 released 2026-11-17 and submitted to the Omarchy plugin marketplace. The CLI is
+covered by tests against a stand-in server, and the plugin has been used against a real
+Plex server with Lidarr and the DJ. While the submission is in review, `main` stays at the
+submitted commit.
 
 ## Next, in order
 
-1. Use it against the real server and fix what the stand-in got wrong (search hubs, large
-   artist lists, relay addresses, tracks without a direct-play part).
-2. Check that the DJ skills work with `cursor-agent`: (a) does it find user-level skills on
-   its own, (b) does it follow a SKILL.md handed over by path. Also try the DJ's own
-   launch (`cursor-agent agent -- <prompt>`, no `--yolo`) and the other three agents.
-3. Push to github.com/sette7blo/omacrate, release v0.1.0.
-4. Translations: move the panel strings into `i18n/en.json`.
+1. Answer the marketplace review; batch any fixes into one commit.
+2. Try the DJ with the other supported agents (claude, codex, copilot).
+3. Translations: move the panel strings into `i18n/en.json`.
 
 ## Ideas, not scheduled
 

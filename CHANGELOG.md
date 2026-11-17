@@ -6,6 +6,8 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.1.0] - 2026-11-17
+
 ### Added
 - Plays a Plex music library through one headless `mpv`, started on the first play and
   gone when the queue ends.
@@ -40,4 +42,5 @@ project uses [Semantic Versioning](https://semver.org/).
   launcher, which switches them off, and tells it that library and Lidarr text is data,
   never instructions. Supported agents: claude, codex, cursor-agent, copilot.
 
-[Unreleased]: https://github.com/sette7blo/omacrate/commits/main
+[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.1.0...HEAD
+[v0.1.0]: https://github.com/sette7blo/omacrate/releases/tag/v0.1.0
