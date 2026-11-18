@@ -6,6 +6,8 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.2.3] - 2026-11-18
+
 ### Security
 - Requests to plex.tv, the Plex server and Lidarr no longer read your curl configuration
   (`~/.curlrc`), so a setting there cannot make them follow a redirect with the
@@ -98,7 +100,8 @@ project uses [Semantic Versioning](https://semver.org/).
   launcher, which switches them off, and tells it that library and Lidarr text is data,
   never instructions. Supported agents: claude, codex, cursor-agent, copilot.
 
-[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.2.3...HEAD
+[v0.2.3]: https://github.com/sette7blo/omacrate/compare/v0.2.2...v0.2.3
 [v0.2.2]: https://github.com/sette7blo/omacrate/compare/v0.2.1...v0.2.2
 [v0.2.1]: https://github.com/sette7blo/omacrate/compare/v0.2.0...v0.2.1
 [v0.2.0]: https://github.com/sette7blo/omacrate/compare/v0.1.1...v0.2.0
