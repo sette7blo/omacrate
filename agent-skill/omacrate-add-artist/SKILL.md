@@ -15,7 +15,9 @@ key. Check before anything else:
 omacrate lidarr status
 ```
 
-If that says Lidarr is not set up, tell the user to fill in the Lidarr
+If that says Lidarr is not available to the DJ, tell the user they can
+allow it in the omacrate settings (the gear, AI DJ section), and stop. If it
+says Lidarr is not set up, tell the user to fill in the Lidarr
 address and API key in the omacrate settings (the gear in the panel), or to
 run `omacrate lidarr set http://<address>:8686` themselves (it asks for the
 API key), and stop. Never ask for the key or put one on a command line.
@@ -56,9 +58,9 @@ API key), and stop. Never ask for the key or put one on a command line.
    omacrate lidarr add 11111111-2222-3333-4444-555555555555
    ```
 
-6. Downloads take a while. `omacrate lidarr queue` shows progress. Once
-   something has been imported, offer to rescan so it shows up in Plex
-   (ask first, it makes the server work):
+6. Downloads take a while, and Lidarr usually tells Plex itself once
+   they are imported. If the user says the new albums still do not show
+   up, offer a rescan (ask first, it makes the server work):
 
    ```sh
    omacrate scan

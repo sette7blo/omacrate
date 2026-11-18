@@ -136,6 +136,7 @@ Item {
   // Only the address is read back; the key goes into the command on stdin
   // and is never shown again.
   property string lidarrAddress: ""
+  property bool lidarrDj: false
   property bool lidarrBusy: false
   property string lidarrMessage: ""
   property bool lidarrFailed: false
@@ -156,6 +157,15 @@ Item {
     root.pendingLidarrKey = String(key || "").replace(/\s+/g, "")
     lidarrProc.mode = "set"
     lidarrProc.command = [root.cli, "lidarr", "set", String(address || "").trim()]
+    lidarrProc.running = true
+  }
+
+  // Whether the DJ may use Lidarr; kept by the CLI next to the key.
+  function setLidarrDj(on) {
+    if (lidarrProc.running) return
+    root.lidarrDj = on
+    lidarrProc.mode = "dj"
+    lidarrProc.command = [root.cli, "lidarr", "dj", on ? "on" : "off"]
     lidarrProc.running = true
   }
 
@@ -189,6 +199,11 @@ Item {
         var data = null
         try { data = JSON.parse(String(lidarrOut.text || "")) } catch (e) { data = null }
         root.lidarrAddress = data && typeof data.address === "string" ? data.address : ""
+        root.lidarrDj = !!(data && data.dj === true)
+        return
+      }
+      if (mode === "dj") {
+        Qt.callLater(root.checkLidarr)
         return
       }
       root.lidarrBusy = false

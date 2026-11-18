@@ -106,7 +106,6 @@ function route(req, url, body) {
     if (p === "/api/v1/rootfolder") return [{ path: "/data/music", defaultQualityProfileId: 2, defaultMetadataProfileId: 3 }]
     if (p === "/api/v1/qualityprofile") return [{ id: 2, name: "Lossless" }]
     if (p === "/api/v1/metadataprofile") return [{ id: 3, name: "Standard" }]
-    if (p === "/api/v1/queue") return { records: [] }
     if (p === "/api/v1/artist" && req.method === "POST") return Object.assign({}, JSON.parse(body), { id: 12, path: "/data/music/Altin Gun" })
     return 404
   }

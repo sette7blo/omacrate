@@ -29,3 +29,5 @@ submitted commit.
   process listing, a URL, a log, the bar config or an agent.
 - Anything that changes the server (saving a playlist, adding an artist, a library scan)
   is a CLI command; the agent skills ask before running one.
+- The DJ uses Lidarr only after its own opt-in, and never sees download activity
+  (queue, history, release names, indexers, download clients).

@@ -120,10 +120,11 @@ The gear in the header opens the settings:
 - **Plex account**: which server and user are linked, **Link Plex**,
   **Switch user** and **Log out**. Logging out stops the player and forgets
   the token on this computer.
-- **Lidarr**: address and API key, so the DJ can add artists you do not
-  have yet. See [Lidarr](#lidarr-optional).
+- **Lidarr**: address and API key, so you can add artists you do not have
+  yet. See [Lidarr](#lidarr-optional).
 - **Bar**: show or hide the track title next to the note.
-- **AI DJ**: off by default. See [DJ](#dj).
+- **AI DJ**: off by default, and Lidarr is a second, separate yes for it.
+  See [DJ](#dj).
 
 ### Plex Home users
 
@@ -206,14 +207,38 @@ own skill folders is a second, separate choice, never made for you: press
 
 - **omacrate-library**: look through the library and play from it
 - **omacrate-playlist**: build a playlist and save it, after confirmation
-- **omacrate-add-artist**: add an artist through Lidarr, after confirmation
+- **omacrate-add-artist**: add an artist through Lidarr, after confirmation;
+  only for the DJ when you allow it (see below)
 
 **Remove agent skills** in the settings, or `uninstall.sh --skills`, removes
 the links again.
 
+### The DJ and Lidarr
+
+What the agent runs, and what it prints, goes to the agent's provider. Your
+library is what the DJ is for; what you download is not. So the DJ cannot
+use Lidarr until you switch on **Let the DJ use Lidarr** (in the AI DJ
+section, shown once Lidarr is set up), or run `omacrate lidarr dj on`.
+While it is off:
+
+- the DJ is not handed the add-artist skill, and its instructions do not
+  mention Lidarr, so the provider is not told Lidarr is there;
+- every `omacrate lidarr` command run by the DJ fails with "not available
+  to the DJ" and prints no address; `omacrate status` leaves the Lidarr
+  line out.
+
+Even when it is on, the DJ only sees artist names, whether they are already
+in Lidarr, and your root folders and profiles: never release names,
+indexers, download clients or history. It can never change the Lidarr
+settings or this switch. The DJ gets this through `OMACRATE_DJ=1` in its
+environment. That is a guard rail, not a wall: the agent runs as you and
+could read omacrate's files itself, which is why it keeps its permission
+prompts. Skills you link into your agents' own folders are not covered;
+an agent you start yourself uses them as you ask.
+
 ## Lidarr (optional)
 
-To let the DJ, or you, add artists you do not have yet, open the settings
+To add artists you do not have yet, open the settings
 (the gear), fill in the Lidarr address and API key (Lidarr, Settings,
 General) and press **Save**; it checks the connection right away. Or from a
 terminal:
@@ -223,7 +248,12 @@ omacrate lidarr set http://media:8686    # asks for the API key
 omacrate lidarr lookup "altin gun"
 omacrate lidarr add <id from lookup>
 omacrate scan                            # ask Plex to rescan afterwards
+omacrate lidarr dj on                    # let the DJ use it too
 ```
+
+Set Lidarr's own Plex connection (Lidarr, Settings, Connect, Plex Media
+Server, Update Library) and new albums show up in Plex once imported,
+without a rescan.
 
 The key is read from the prompt or from stdin, never from the command line.
 

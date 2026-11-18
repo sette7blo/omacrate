@@ -6,6 +6,16 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- The DJ cannot use Lidarr until you allow it with **Let the DJ use Lidarr** in the
+  settings or `omacrate lidarr dj on`. While it is off, the DJ is not given the
+  add-artist skill or told that Lidarr exists, and `omacrate lidarr` refuses it. The DJ
+  can never change the Lidarr settings.
+
+### Removed
+- `omacrate lidarr queue`. It showed what is downloading, which nothing needs: Lidarr
+  can tell Plex itself when albums are imported.
+
 ## [v0.1.1] - 2026-11-18
 
 ### Fixed
