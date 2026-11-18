@@ -192,9 +192,10 @@ downloaded files, MusicBrainz data through Lidarr), and such text could
 carry instructions. The DJ is also told to treat all of it as data.
 
 There is no AI and no API key in the plugin. The agent is the one you
-already use, and it works through the `omacrate` command, so it never sees
-your Plex token. It looks things up and plays without asking, and asks
-before anything that changes your server.
+already use, and it works through the `omacrate` command, so it never needs
+your Plex token (it could still read it, see
+[The DJ and Lidarr](#the-dj-and-lidarr)). It looks things up and plays
+without asking, and asks before anything that changes your server.
 
 The agent is pointed at three skill files in `agent-skill/` by path, so
 nothing has to be installed for the DJ. Linking the skills into your agents'
@@ -231,9 +232,15 @@ Even when it is on, the DJ only sees artist names, whether they are already
 in Lidarr, and your root folders and profiles: never release names,
 indexers, download clients or history. It can never change the Lidarr
 settings or this switch. The DJ gets this through `OMACRATE_DJ=1` in its
-environment. That is a guard rail, not a wall: the agent runs as you and
-could read omacrate's files itself, which is why it keeps its permission
-prompts. Skills you link into your agents' own folders are not covered;
+environment. That is a guard rail, not a wall: the switch decides what the
+DJ is told and what `omacrate` will do for it, but it does not hide anything.
+The agent runs as you, and the Plex token and the Lidarr key are in
+`~/.local/state/omarchy/omacrate/credentials.json` (mode 600, readable by
+every program you run), whether the switch is on or off. No plugin can hide a
+file from a program running as the same user. The DJ keeps the agent's
+permission prompts, but what they cover depends on the agent: some read files
+without asking. If that is not enough for you, leave the DJ off, or leave
+Lidarr unset. Skills you link into your agents' own folders are not covered;
 an agent you start yourself uses them as you ask.
 
 ## Lidarr (optional)
@@ -278,6 +285,10 @@ The key is read from the prompt or from stdin, never from the command line.
   plain http on the home network; prefer an https address if you have one.
 - Text from the server is shown as plain text and never becomes part of a
   shell command.
+- The Plex token and the Lidarr key are stored in
+  `~/.local/state/omarchy/omacrate/credentials.json` (mode 600). Any program
+  you run can read it, an AI agent included; the DJ settings do not change
+  that.
 
 ## Tests
 
