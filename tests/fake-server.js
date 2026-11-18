@@ -64,6 +64,9 @@ function route(req, url, body) {
   const q = url.searchParams
   let m
 
+  // Anything below /hop is sent on to another host name for the same server.
+  if (p.indexOf("/hop/") === 0) return { redirect: "http://localhost:" + server.address().port + "/landed" + p.slice(4) }
+
   if (p === "/api/v2/pins" && req.method === "POST") return { id: 77, code: "ABCD" }
   if (p === "/api/v2/pins/77") { pinPolls += 1; return { id: 77, code: "ABCD", authToken: pinPolls > 1 ? ACCOUNT_TOKEN : null } }
   if (p === "/api/v2/home/users") {
@@ -179,6 +182,7 @@ const server = http.createServer(function(req, res) {
     })
     const out = route(req, url, body)
     if (typeof out === "number") { res.statusCode = out; return res.end() }
+    if (out && out.redirect) { res.statusCode = 302; res.setHeader("Location", out.redirect); return res.end() }
     if (Buffer.isBuffer(out)) { res.setHeader("Content-Type", "audio/wav"); return res.end(out) }
     res.setHeader("Content-Type", "application/json")
     res.end(JSON.stringify(out))
