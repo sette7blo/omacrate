@@ -9,7 +9,6 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 PLUGIN_ID="io.github.sette7blo.omacrate"
-TIMESTAMP="$(date +%Y%m%d%H%M%S)"
 
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
@@ -59,18 +58,27 @@ done
 
 log() { printf '[omacrate] %s\n' "$*"; }
 
+# Never replaces or moves anything: when the path is already taken by something
+# that is not this plugin's link, it is left as it is. The plugin calls its own
+# bin/ directly, so it works without the link.
 link_path() {
   local source_path="$1"
   local target_path="$2"
   mkdir -p "$(dirname "$target_path")"
   if [[ -L "$target_path" && "$(readlink -f "$target_path")" == "$(readlink -f "$source_path")" ]]; then
-    return
+    return 0
   fi
   if [[ -e "$target_path" || -L "$target_path" ]]; then
-    mv "$target_path" "$target_path.bak.$TIMESTAMP"
-    log "backed up existing $target_path"
+    log "left $target_path as it is: something else is already there"
+    return 0
   fi
   ln -s "$source_path" "$target_path"
+  log "linked $target_path"
+}
+
+# Ours, or taken by something we leave alone: either way nothing to do.
+in_place() {
+  [[ -e "$1" || -L "$1" ]]
 }
 
 linked_to() {
@@ -79,14 +87,14 @@ linked_to() {
 
 setup_complete() {
   local skill_src agent_home
-  linked_to "$CLI_LINK" "$PROJECT_DIR/bin/omacrate" || return 1
-  [[ -e "$PROJECT_DIR/omacrate.desktop" ]] && linked_to "$DESKTOP_LINK" "$PROJECT_DIR/omacrate.desktop" || return 1
+  in_place "$CLI_LINK" || return 1
+  [[ -e "$PROJECT_DIR/omacrate.desktop" ]] && in_place "$DESKTOP_LINK" || return 1
   $SKILLS || return 0
   for skill_src in "$PROJECT_DIR"/agent-skill/*/; do
     [[ -d "$skill_src" ]] || continue
     for agent_home in "${AGENT_HOMES[@]}"; do
       [[ -d "$agent_home" ]] || continue
-      linked_to "$agent_home/skills/$(basename "$skill_src")" "$skill_src" || return 1
+      in_place "$agent_home/skills/$(basename "$skill_src")" || return 1
     done
   done
   return 0
@@ -118,20 +126,17 @@ install_plugin_link() {
     return
   fi
   link_path "$PROJECT_DIR" "$PLUGIN_LINK"
-  log "linked plugin dir -> $PLUGIN_LINK"
 }
 
 install_cli() {
   chmod +x "$PROJECT_DIR/bin/omacrate"
   link_path "$PROJECT_DIR/bin/omacrate" "$CLI_LINK"
-  log "linked CLI -> $CLI_LINK"
 }
 
 install_desktop() {
   local rendered="$PROJECT_DIR/omacrate.desktop"
   sed "s|@@OMACRATE_CLI@@|$CLI_LINK|g" "$PROJECT_DIR/omacrate.desktop.in" > "$rendered"
   link_path "$rendered" "$DESKTOP_LINK"
-  log "linked .desktop -> $DESKTOP_LINK"
   command -v update-desktop-database >/dev/null 2>&1 \
     && update-desktop-database "$DATA_HOME/applications" >/dev/null 2>&1 || true
 }
@@ -144,7 +149,6 @@ install_skills() {
     for agent_home in "${AGENT_HOMES[@]}"; do
       if [[ -d "$agent_home" ]]; then
         link_path "${skill_src%/}" "$agent_home/skills/$skill_name"
-        log "linked skill $skill_name -> $agent_home/skills/"
       fi
     done
   done
