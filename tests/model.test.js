@@ -245,3 +245,14 @@ test("volume moves in steps of five within 0 to 100", function() {
   assert.equal(M.volumeGlyph(80, true), M.volumeGlyph(0, false))
   assert.notEqual(M.volumeGlyph(80, false), M.volumeGlyph(20, false))
 })
+
+test("plain http needs a yes only when it leaves this computer", function() {
+  assert.equal(M.lidarrCleartext("http://192.168.1.10:8686"), true)
+  assert.equal(M.lidarrCleartext("http://media:8686/"), true)
+  assert.equal(M.lidarrCleartext("http://localhost.example:8686"), true)
+  assert.equal(M.lidarrCleartext("https://lidarr.home.lan"), false)
+  assert.equal(M.lidarrCleartext("http://localhost:8686"), false)
+  assert.equal(M.lidarrCleartext("http://127.0.0.1:8686/lidarr"), false)
+  assert.equal(M.lidarrCleartext("http://[::1]:8686"), false)
+  assert.equal(M.lidarrCleartext(""), false)
+})

@@ -6,6 +6,18 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- Playback checks the Plex server's TLS certificate. mpv does not by default, so a
+  machine in the middle could have read the token.
+- mpv no longer follows a redirect: FFmpeg would have sent the `X-Plex-Token` header on
+  to the new host. A redirected stream now fails to play instead. mpv's yt-dlp hook is
+  off, so a stream address is never handed to yt-dlp.
+- The Lidarr API key is sent over plain http to another computer only after an explicit
+  yes: **Send the key over plain http** in the settings (asked on every save) or
+  `omacrate lidarr set --allow-http`. https addresses, and http to this same computer,
+  work as before. A plain http address saved by an earlier version is paused until it is
+  saved again with that yes. The settings example address is now https.
+
 ## [v0.2.1] - 2026-11-18
 
 ### Fixed

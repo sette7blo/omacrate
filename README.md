@@ -251,12 +251,25 @@ General) and press **Save**; it checks the connection right away. Or from a
 terminal:
 
 ```sh
-omacrate lidarr set http://media:8686    # asks for the API key
+omacrate lidarr set https://lidarr.home.lan   # asks for the API key
 omacrate lidarr lookup "altin gun"
 omacrate lidarr add <id from lookup>
 omacrate scan                            # ask Plex to rescan afterwards
 omacrate lidarr dj on                    # let the DJ use it too
 ```
+
+An `https://` address is used as it is, and so is plain `http://` to this
+same computer. Plain `http://` to another computer sends the key, and every
+request, unencrypted across your network, so omacrate asks first: turn on
+**Send the key over plain http** under the address (it is asked again on
+every save), or pass `--allow-http`:
+
+```sh
+omacrate lidarr set --allow-http http://192.168.1.10:8686
+```
+
+A plain http address saved by an earlier version is paused until you save it
+again this way.
 
 Set Lidarr's own Plex connection (Lidarr, Settings, Connect, Plex Media
 Server, Update Library) and new albums show up in Plex once imported,
@@ -280,9 +293,13 @@ The key is read from the prompt or from stdin, never from the command line.
   If Secure connections is disabled in the Plex server settings, omacrate
   cannot connect.
 - mpv only opens stream paths of Plex's own form (`/library/parts/...`) on
-  the linked server, so the token it sends is never handed to another host.
-- The Lidarr API key goes to the address you enter. Lidarr usually runs on
-  plain http on the home network; prefer an https address if you have one.
+  the linked server, checks the server's certificate (mpv does not by
+  default), refuses redirects instead of following them with the token, and
+  never hands a stream address to yt-dlp. The token it sends stays with the
+  linked server.
+- The Lidarr API key goes only to the address you enter, without following
+  redirects. Plain http to another computer needs your explicit yes first;
+  prefer an https address if Lidarr has one.
 - Text from the server is shown as plain text and never becomes part of a
   shell command.
 - The Plex token and the Lidarr key are stored in

@@ -137,6 +137,7 @@ Item {
   // and is never shown again.
   property string lidarrAddress: ""
   property bool lidarrDj: false
+  property bool lidarrAllowHttp: false
   property bool lidarrBusy: false
   property string lidarrMessage: ""
   property bool lidarrFailed: false
@@ -149,14 +150,16 @@ Item {
     lidarrProc.running = true
   }
 
-  function saveLidarr(address, key) {
+  function saveLidarr(address, key, allowHttp) {
     if (lidarrProc.running) return
     root.lidarrBusy = true
     root.lidarrMessage = ""
     root.lidarrFailed = false
     root.pendingLidarrKey = String(key || "").replace(/\s+/g, "")
     lidarrProc.mode = "set"
-    lidarrProc.command = [root.cli, "lidarr", "set", String(address || "").trim()]
+    lidarrProc.command = allowHttp
+      ? [root.cli, "lidarr", "set", "--allow-http", String(address || "").trim()]
+      : [root.cli, "lidarr", "set", String(address || "").trim()]
     lidarrProc.running = true
   }
 
@@ -200,6 +203,7 @@ Item {
         try { data = JSON.parse(String(lidarrOut.text || "")) } catch (e) { data = null }
         root.lidarrAddress = data && typeof data.address === "string" ? data.address : ""
         root.lidarrDj = !!(data && data.dj === true)
+        root.lidarrAllowHttp = !!(data && data.allowHttp === true)
         return
       }
       if (mode === "dj") {

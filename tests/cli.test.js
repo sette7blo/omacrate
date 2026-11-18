@@ -176,9 +176,9 @@ test("plex home: list the users, switch to one, and back", async function() {
 test("lidarr: the key comes from stdin, lookup and add go through", async function() {
   assert.notEqual(run(["lidarr", "lookup", "air"]).code, 0)
   assert.notEqual(run(["lidarr", "set", base], "short\n").code, 0)
-  assert.deepEqual(json(["lidarr", "address"]), { address: "", dj: false })
+  assert.deepEqual(json(["lidarr", "address"]), { address: "", dj: false, allowHttp: false })
   assert.match(ok(["lidarr", "set", base + "/"], "abcdef0123456789abcdef0123456789\n"), /Connected to Lidarr 3\.1\.6/)
-  assert.deepEqual(json(["lidarr", "address"]), { address: base, dj: false })
+  assert.deepEqual(json(["lidarr", "address"]), { address: base, dj: false, allowHttp: false })
   assert.doesNotMatch(ok(["--json", "lidarr", "address"]), /abcdef/)
   assert.match(ok(["lidarr", "lookup", "altin"]), /11111111-2222-3333-4444-555555555555\s+Altin Gun\s+not added/)
   assert.match(ok(["lidarr", "add", "11111111-2222-3333-4444-555555555555"]), /Added Altin Gun to Lidarr/)
@@ -192,6 +192,25 @@ test("lidarr: the key comes from stdin, lookup and add go through", async functi
   assert.notEqual(again.code, 0)
   assert.match(again.err, /already in Lidarr/)
   assert.notEqual(run(["lidarr", "queue"]).code, 0)
+})
+
+test("the Lidarr key goes over plain http to another computer only with an explicit yes", function() {
+  const saved = fs.readFileSync(credPath(), "utf8")
+  const key = "abcdef0123456789abcdef0123456789\n"
+  // 192.0.2.0/24 is reserved for documentation: nothing answers there.
+  const refused = run(["lidarr", "set", "http://192.0.2.1:8686"], key)
+  assert.notEqual(refused.code, 0)
+  assert.match(refused.err, /plain http.*--allow-http/)
+  assert.equal(fs.readFileSync(credPath(), "utf8"), saved)
+  // An address saved before the switch existed is paused, not used.
+  const cred = JSON.parse(saved)
+  cred.lidarr.baseUrl = "http://192.0.2.1:8686"
+  fs.writeFileSync(credPath(), JSON.stringify(cred), { mode: 0o600 })
+  const paused = run(["lidarr", "status"])
+  assert.notEqual(paused.code, 0)
+  assert.match(paused.err, /plain http/)
+  fs.writeFileSync(credPath(), saved, { mode: 0o600 })
+  assert.match(ok(["lidarr", "status"]), /ok/)
 })
 
 test("the DJ reaches Lidarr only after the user allows it, and never changes its settings", function() {
@@ -212,7 +231,7 @@ test("the DJ reaches Lidarr only after the user allows it, and never changes its
   assert.match(asDj(["lidarr", "dj", "on"]).err, /cannot change the Lidarr settings/)
   assert.equal(ok(["lidarr", "dj"]), "off")
   ok(["lidarr", "dj", "on"])
-  assert.deepEqual(json(["lidarr", "address"]), { address: base, dj: true })
+  assert.deepEqual(json(["lidarr", "address"]), { address: base, dj: true, allowHttp: false })
   assert.match(asDj(["lidarr", "lookup", "altin"]).out, /Altin Gun/)
   assert.match(asDj(["lidarr", "set", base], "abcdef0123456789abcdef0123456789\n").err, /cannot change/)
   assert.match(asDj(["lidarr", "unset"]).err, /cannot change/)
@@ -264,6 +283,11 @@ test("play, queue, skip and stop through mpv", { skip: !canPlay && "mpv or socat
   for (const r of parts) assert.equal(r.plexToken, "srv-token-1")
   const ps = spawnSync("ps", ["-eo", "args"], { encoding: "utf8" }).stdout
   assert.doesNotMatch(ps, /srv-token-1/)
+  // The token stays on the linked server: checked certificates, no redirects, no yt-dlp.
+  const conf = fs.readFileSync(path.join(path.dirname(credPath()), "mpv.conf"), "utf8")
+  assert.match(conf, /^tls-verify=yes$/m)
+  assert.match(conf, /^stream-lavf-o=max_redirects=0$/m)
+  assert.match(conf, /^ytdl=no$/m)
 
   ok(["stop"])
   await sleep(400)
