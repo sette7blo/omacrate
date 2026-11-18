@@ -6,6 +6,14 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- mpv no longer holds one Plex token for everything it plays. Each queued track carries
+  the token of the server it was queued from, so after the saved server address or token
+  changes, new tracks are sent with the new token and earlier tracks keep theirs; one
+  server's token never goes to another. Switching server with `omacrate server` or
+  logging in again now stops the player and empties the queue, as switching Plex Home
+  user already did.
+
 ## [v0.2.3] - 2026-11-18
 
 ### Security

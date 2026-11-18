@@ -308,6 +308,7 @@ test("play, queue, skip and stop through mpv", { skip: !canPlay && "mpv or socat
   assert.doesNotMatch(ps, /srv-token-1/)
   // The token stays on the linked server: checked certificates, no redirects, no yt-dlp.
   const conf = fs.readFileSync(path.join(path.dirname(credPath()), "mpv.conf"), "utf8")
+  assert.doesNotMatch(conf, /srv-token|X-Plex-Token/)
   assert.match(conf, /^tls-verify=yes$/m)
   assert.match(conf, /^stream-lavf-o=max_redirects=0$/m)
   assert.match(conf, /^ytdl=no$/m)
@@ -318,6 +319,48 @@ test("play, queue, skip and stop through mpv", { skip: !canPlay && "mpv or socat
   // The level outlives the player and is handed to the next one.
   assert.deepEqual(json(["volume"]), { volume: 45 })
   assert.notEqual(run(["next"]).code, 0)
+})
+
+test("each queued track sends only the token of the server it was queued from", { skip: !canPlay && "mpv or socat missing" }, async function() {
+  const saved = fs.readFileSync(credPath(), "utf8")
+  const port = new URL(base).port
+  const partsFrom = async function(host) {
+    return (await requests()).filter(function(r) { return r.path.indexOf("/library/parts/") === 0 && r.host === host })
+  }
+  try {
+    ok(["play", "201"])
+    await sleep(700)
+    // Another address and another token are saved while the queue plays,
+    // as an address lookup or a switch made elsewhere would leave them.
+    const cred = JSON.parse(saved)
+    cred.plex.serverUri = "http://localhost:" + port
+    cred.plex.serverToken = "srv-token-2"
+    fs.writeFileSync(credPath(), JSON.stringify(cred), { mode: 0o600 })
+    ok(["add", "300"])
+    ok(["next"])
+    await sleep(700)
+    assert.equal(json(["now"]).key, "300")
+    const added = await partsFrom("localhost:" + port)
+    assert.ok(added.length > 0)
+    for (const r of added) assert.equal(r.plexToken, "srv-token-2")
+    // Back to the track queued before the change: it keeps its own server and token.
+    ok(["prev"])
+    await sleep(700)
+    assert.equal(json(["now"]).key, "310")
+    const first = await partsFrom("127.0.0.1:" + port)
+    assert.ok(first.length > 0)
+    for (const r of first) assert.equal(r.plexToken, "srv-token-1")
+  } finally {
+    fs.writeFileSync(credPath(), saved, { mode: 0o600 })
+  }
+  // Switching the server stops the player and empties the queue.
+  const cred = JSON.parse(saved)
+  cred.plex.serverToken = "srv-token-2"
+  fs.writeFileSync(credPath(), JSON.stringify(cred), { mode: 0o600 })
+  ok(["server", "Crate"])
+  assert.deepEqual(json(["now"]), { playing: false })
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(path.dirname(credPath()), "queue.json"), "utf8")), [])
+  assert.equal(JSON.parse(fs.readFileSync(credPath(), "utf8")).plex.serverToken, "srv-token-1")
 })
 
 test("the player quits by itself when the queue ends", { skip: !canPlay && "mpv or socat missing" }, async function() {

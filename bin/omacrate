@@ -376,6 +376,7 @@ pin_wait() {
     sleep 2
   done
   [[ -n "$token" ]] || die "nobody entered the code in time. Start again."
+  drop_player
   TOKEN="$token" cred_update '.plex = {token: env.TOKEN}'
   resolve_server ""
   remember_home "$(home_users 2>/dev/null || echo '[]')"
@@ -397,10 +398,18 @@ cmd_login() {
   esac
 }
 
-cmd_logout() {
+# The queue belongs to the server and account it was started on, so a switch
+# of either stops the player and empties the queue.
+drop_player() {
   cmd_stop >/dev/null 2>&1 || true
   rm -f "$MPV_CONF"
   [[ -e "$QUEUE" ]] && write_queue <<<'[]'
+  return 0
+}
+server_pair() { jq -c '[.plex.serverUri, .plex.serverToken]' "$CRED" 2>/dev/null || echo null; }
+
+cmd_logout() {
+  drop_player
   [[ -e "$CRED" ]] && cred_update 'del(.plex)'
   echo "Unlinked from Plex. The Lidarr settings are kept."
 }
@@ -415,7 +424,11 @@ cmd_server() {
       | [(if .name == $cur then "*" else " " end), .name, (if .owned then "owned" else "shared" end)] | @tsv' \
       | column -t -s $'\t'
   else
-    printf 'Using %s.\n' "$(resolve_server "$*")"
+    local before name
+    before="$(server_pair)"
+    name="$(resolve_server "$*")"
+    [[ "$(server_pair)" == "$before" ]] || drop_player
+    printf 'Using %s.\n' "$name"
   fi
 }
 
@@ -487,10 +500,8 @@ cmd_user() {
     BEFORE="$before" cred_update '.plex = (env.BEFORE | fromjson)'
     die "$title has no access to the server $(cred .plex.serverName). Nothing changed."
   fi
-  # The player holds the previous user's token, and the queue was theirs.
-  cmd_stop >/dev/null 2>&1 || true
-  rm -f "$MPV_CONF"
-  write_queue <<<'[]'
+  # The queued tracks carry the previous user's token, and the queue was theirs.
+  drop_player
   if $JSON; then jq -cn --arg t "$title" '{user: $t}'; else printf 'Now using %s.\n' "$title"; fi
 }
 
@@ -518,13 +529,11 @@ start_player() {
   need mpv
   prepare
   rm -f "$SOCK"
-  local token
-  token="$(cred .plex.serverToken)"
-  is_token "$token" || die "the saved Plex token is not valid. Run: omacrate login"
-  # The token goes only to the server it was issued for: certificates are
-  # checked (mpv does not by default), a redirect is refused rather than
-  # followed with the header, and yt-dlp is never handed a stream address.
-  ( umask 077; printf 'http-header-fields=X-Plex-Token: %s\ntls-verify=yes\nstream-lavf-o=max_redirects=0\nytdl=no\n' "$token" > "$MPV_CONF" )
+  # mpv holds no token of its own: each track brings the token for its own
+  # server (see load_lines). Certificates are checked (mpv does not by
+  # default), a redirect is refused rather than followed with the header, and
+  # yt-dlp is never handed a stream address.
+  ( umask 077; printf 'tls-verify=yes\nstream-lavf-o=max_redirects=0\nytdl=no\n' > "$MPV_CONF" )
   local args=(--no-config "--include=$MPV_CONF" --idle=once --no-video --no-terminal
     --audio-display=no --gapless-audio=weak "--volume=$(saved_volume)" "--input-ipc-server=$SOCK") lib extra=()
   # Media keys, when the mpv MPRIS plugin is installed.
@@ -549,10 +558,21 @@ write_queue() {
   mv -f "$tmp" "$QUEUE"
 }
 
+# One loadfile command per track. The server address and its token come from
+# a single read of the credentials, and the token travels as an option of
+# that one track, so a track only ever sends the token of the server it was
+# loaded from, whatever is selected later. The token never enters an address
+# (which mpv shows to other programs) or an argument list.
 load_lines() {
-  jq -c --arg base "$(cred .plex.serverUri)" '
-    .[] | {command: ["loadfile", ($base + .part), "append", -1,
-      {"force-media-title": ((if .artist != "" then .artist + " - " else "" end) + .title)}]}'
+  local pair base token
+  pair="$(jq -r '[.plex.serverUri // "", .plex.serverToken // ""] | @tsv' "$CRED")"
+  base="${pair%%$'\t'*}" token="${pair#*$'\t'}"
+  [[ "$base" =~ ^https?://[^[:space:]\"\\]+$ ]] || die "no Plex server address is saved. Run: omacrate server"
+  is_token "$token" || die "the saved Plex token is not valid. Run: omacrate login"
+  BASE="$base" HEADER="X-Plex-Token: $token" jq -c '
+    .[] | {command: ["loadfile", (env.BASE + .part), "append", -1,
+      {"force-media-title": ((if .artist != "" then .artist + " - " else "" end) + .title),
+       "http-header-fields": env.HEADER}]}'
 }
 
 cmd_play() {
@@ -572,6 +592,8 @@ cmd_play() {
   count="$(jq 'length' <<<"$tracks")"
   [[ "$count" -gt 0 ]] || die "nothing playable behind those keys"
   [[ "$at" -lt "$count" ]] || at=0
+  local lines
+  lines="$(load_lines <<<"$tracks")"
   player_alive || start_player
   # The track that is playing stays in the list until the new ones are in,
   # so mpv never falls idle and quits in between.
@@ -580,7 +602,7 @@ cmd_play() {
   kept="$(mpv_get playlist-count)"
   [[ "$kept" =~ ^[0-9]+$ ]] || kept=0
   {
-    load_lines <<<"$tracks"
+    printf '%s\n' "$lines"
     jq -cn --argjson i "$((kept + at))" '{command: ["playlist-play-index", $i]}'
     [[ "$kept" -eq 0 ]] || echo '{"command":["playlist-remove",0]}'
     echo '{"command":["set_property","pause",false]}'
@@ -596,7 +618,9 @@ cmd_add() {
   tracks="$(tracks_of "$@")"
   count="$(jq 'length' <<<"$tracks")"
   [[ "$count" -gt 0 ]] || die "nothing playable behind those keys"
-  load_lines <<<"$tracks" | mpv_send >/dev/null
+  local lines
+  lines="$(load_lines <<<"$tracks")"
+  printf '%s\n' "$lines" | mpv_send >/dev/null
   jq -c --argjson more "$tracks" '. + $more' "$QUEUE" | write_queue
   $JSON || printf 'Added %d tracks to the queue.\n' "$count"
 }

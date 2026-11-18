@@ -5,6 +5,8 @@ const http = require("node:http")
 
 const ACCOUNT_TOKEN = "acct-token-1"
 const SERVER_TOKEN = "srv-token-1"
+// A second server token, for a switch to another server while a queue plays.
+const OTHER_SERVER_TOKEN = "srv-token-2"
 const KID_TOKEN = "kid-token-1"
 const homeUsers = [
   { id: 1, uuid: "aaaaaaaaaaaaaaaa", title: "Papa", admin: true, restricted: false, protected: false },
@@ -113,7 +115,7 @@ function route(req, url, body) {
     return 404
   }
 
-  if (req.headers["x-plex-token"] !== SERVER_TOKEN) return 401
+  if (req.headers["x-plex-token"] !== SERVER_TOKEN && req.headers["x-plex-token"] !== OTHER_SERVER_TOKEN) return 401
   if (p === "/identity") return { MediaContainer: { machineIdentifier: "machine-1" } }
   if (p === "/library/sections") {
     return { MediaContainer: { Directory: [{ key: "1", type: "movie", title: "Films" }, { key: "3", type: "artist", title: "Music" }] } }
@@ -176,7 +178,7 @@ const server = http.createServer(function(req, res) {
       return res.end(JSON.stringify(log))
     }
     log.push({
-      method: req.method, path: url.pathname, query: url.search, body: body,
+      method: req.method, host: req.headers.host || "", path: url.pathname, query: url.search, body: body,
       plexToken: req.headers["x-plex-token"] || "", apiKey: req.headers["x-api-key"] || "",
       agent: req.headers["user-agent"] || "", contentType: req.headers["content-type"] || "", length: Number(req.headers["content-length"] || 0)
     })
