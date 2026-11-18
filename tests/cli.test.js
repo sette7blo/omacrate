@@ -213,6 +213,29 @@ test("the Lidarr key goes over plain http to another computer only with an expli
   assert.match(ok(["lidarr", "status"]), /ok/)
 })
 
+test("a curl config cannot send the token or key on through a redirect", async function() {
+  const home = path.join(tmp, "curl-home")
+  fs.mkdirSync(home, { recursive: true })
+  fs.writeFileSync(path.join(home, ".curlrc"), "location\n")
+  const saved = fs.readFileSync(credPath(), "utf8")
+  const cred = JSON.parse(saved)
+  cred.plex.serverUri = base + "/hop"
+  cred.lidarr.baseUrl = base + "/hop"
+  fs.writeFileSync(credPath(), JSON.stringify(cred), { mode: 0o600 })
+  const plain = env
+  env = Object.assign({}, env, { CURL_HOME: home })
+  try {
+    assert.notEqual(run(["artists"]).code, 0)
+    assert.notEqual(run(["lidarr", "status"]).code, 0)
+  } finally {
+    env = plain
+    fs.writeFileSync(credPath(), saved, { mode: 0o600 })
+  }
+  const hops = (await requests()).filter(function(r) { return r.path.indexOf("/hop/") === 0 })
+  assert.ok(hops.length >= 2)
+  assert.deepEqual((await requests()).filter(function(r) { return r.path.indexOf("/landed/") === 0 }), [])
+})
+
 test("the DJ reaches Lidarr only after the user allows it, and never changes its settings", function() {
   const asDj = function(args, input) {
     const out = spawnSync(CLI, args, { env: Object.assign({}, env, { OMACRATE_DJ: "1" }), input: input || "", encoding: "utf8" })

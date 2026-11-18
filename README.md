@@ -297,6 +297,9 @@ The key is read from the prompt or from stdin, never from the command line.
   default), refuses redirects instead of following them with the token, and
   never hands a stream address to yt-dlp. The token it sends stays with the
   linked server.
+- Every request to Plex and Lidarr ignores your curl configuration
+  (`~/.curlrc`), refuses redirects and checks certificates, so the token and
+  the Lidarr key stay with the address they were meant for.
 - The Lidarr API key goes only to the address you enter, without following
   redirects. Plain http to another computer needs your explicit yes first;
   prefer an https address if Lidarr has one.

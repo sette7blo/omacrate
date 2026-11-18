@@ -6,6 +6,12 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- Requests to plex.tv, the Plex server and Lidarr no longer read your curl configuration
+  (`~/.curlrc`), so a setting there cannot make them follow a redirect with the
+  `X-Plex-Token` or `X-Api-Key` header, or skip the certificate check. A redirect is now
+  an error rather than an empty answer.
+
 ## [v0.2.2] - 2026-11-18
 
 ### Security
