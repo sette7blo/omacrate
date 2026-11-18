@@ -6,6 +6,8 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.2.4] - 2026-11-18
+
 ### Security
 - mpv no longer holds one Plex token for everything it plays. Each queued track carries
   the token of the server it was queued from, so after the saved server address or token
@@ -108,7 +110,8 @@ project uses [Semantic Versioning](https://semver.org/).
   launcher, which switches them off, and tells it that library and Lidarr text is data,
   never instructions. Supported agents: claude, codex, cursor-agent, copilot.
 
-[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.2.4...HEAD
+[v0.2.4]: https://github.com/sette7blo/omacrate/compare/v0.2.3...v0.2.4
 [v0.2.3]: https://github.com/sette7blo/omacrate/compare/v0.2.2...v0.2.3
 [v0.2.2]: https://github.com/sette7blo/omacrate/compare/v0.2.1...v0.2.2
 [v0.2.1]: https://github.com/sette7blo/omacrate/compare/v0.2.0...v0.2.1
