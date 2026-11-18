@@ -92,5 +92,5 @@ the user did not name, and never several at once.
   when you want to choose.
 - One playlist per confirmation. There is no command to rename a
   playlist; tell the user to do that in Plex.
-- When the user wants music by an artist they do not have, say so and
-  point to `omacrate-add-artist`.
+- When the user wants music by an artist they do not have, say so. Only
+  if you were given the `omacrate-add-artist` skill, offer to add them.

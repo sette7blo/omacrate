@@ -105,8 +105,8 @@ Column {
   PanelSeparator { foreground: root.foreground }
 
   // ---- Lidarr ----
-  // Optional. Used only when you ask for an artist you do not have yet, by
-  // the DJ or by omacrate lidarr add. The key goes to the command on stdin
+  // Optional. Used only when you ask for an artist you do not have yet, with
+  // omacrate lidarr add, or by the DJ if it is allowed in the DJ section. The key goes to the command on stdin
   // and is never shown again.
   Column {
     id: lidarrSection
@@ -125,7 +125,7 @@ Column {
       width: parent.width
       text: root.lidarrAddress !== ""
         ? "Connected to " + root.lidarrAddress + "."
-        : "Optional. With Lidarr set up, the DJ can add artists you do not have yet."
+        : "Optional. With Lidarr set up, you can add artists you do not have yet."
       color: root.foreground
       wrapMode: Text.WordWrap
       font.family: root.fontFamily
@@ -277,6 +277,20 @@ Column {
       wrapMode: Text.WordWrap
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
+    }
+
+    // A second yes, so the agent's provider does not learn what you download
+    // or that Lidarr is there unless you want it to.
+    Toggle {
+      width: parent.width
+      visible: root.options.dj && root.lidarrAddress !== ""
+      label: "Let the DJ use Lidarr"
+      description: "Off: the DJ cannot look up or add artists, and is not told that Lidarr is there."
+      checked: root.service ? root.service.lidarrDj : false
+      foreground: root.foreground
+      accent: root.accent
+      fontFamily: root.fontFamily
+      onClicked: if (root.service) root.service.setLidarrDj(!root.service.lidarrDj)
     }
 
     Text {

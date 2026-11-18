@@ -176,9 +176,9 @@ test("plex home: list the users, switch to one, and back", async function() {
 test("lidarr: the key comes from stdin, lookup and add go through", async function() {
   assert.notEqual(run(["lidarr", "lookup", "air"]).code, 0)
   assert.notEqual(run(["lidarr", "set", base], "short\n").code, 0)
-  assert.deepEqual(json(["lidarr", "address"]), { address: "" })
+  assert.deepEqual(json(["lidarr", "address"]), { address: "", dj: false })
   assert.match(ok(["lidarr", "set", base + "/"], "abcdef0123456789abcdef0123456789\n"), /Connected to Lidarr 3\.1\.6/)
-  assert.deepEqual(json(["lidarr", "address"]), { address: base })
+  assert.deepEqual(json(["lidarr", "address"]), { address: base, dj: false })
   assert.doesNotMatch(ok(["--json", "lidarr", "address"]), /abcdef/)
   assert.match(ok(["lidarr", "lookup", "altin"]), /11111111-2222-3333-4444-555555555555\s+Altin Gun\s+not added/)
   assert.match(ok(["lidarr", "add", "11111111-2222-3333-4444-555555555555"]), /Added Altin Gun to Lidarr/)
@@ -191,6 +191,34 @@ test("lidarr: the key comes from stdin, lookup and add go through", async functi
   const again = run(["lidarr", "add", "99999999-2222-3333-4444-555555555555"])
   assert.notEqual(again.code, 0)
   assert.match(again.err, /already in Lidarr/)
+  assert.notEqual(run(["lidarr", "queue"]).code, 0)
+})
+
+test("the DJ reaches Lidarr only after the user allows it, and never changes its settings", function() {
+  const asDj = function(args, input) {
+    const out = spawnSync(CLI, args, { env: Object.assign({}, env, { OMACRATE_DJ: "1" }), input: input || "", encoding: "utf8" })
+    return { code: out.status, out: out.stdout.trim(), err: out.stderr.trim() }
+  }
+  assert.equal(ok(["lidarr", "dj"]), "off")
+  for (const args of [["lidarr", "lookup", "altin"], ["lidarr", "status"], ["lidarr", "profiles"], ["lidarr", "address"]]) {
+    const r = asDj(args)
+    assert.notEqual(r.code, 0, args.join(" "))
+    assert.match(r.err, /not available to the DJ/)
+    assert.doesNotMatch(r.out, /127\.0\.0\.1|http/)
+  }
+  assert.doesNotMatch(asDj(["status"]).out, /Lidarr/)
+  assert.match(ok(["status"]), /Lidarr:/)
+
+  assert.match(asDj(["lidarr", "dj", "on"]).err, /cannot change the Lidarr settings/)
+  assert.equal(ok(["lidarr", "dj"]), "off")
+  ok(["lidarr", "dj", "on"])
+  assert.deepEqual(json(["lidarr", "address"]), { address: base, dj: true })
+  assert.match(asDj(["lidarr", "lookup", "altin"]).out, /Altin Gun/)
+  assert.match(asDj(["lidarr", "set", base], "abcdef0123456789abcdef0123456789\n").err, /cannot change/)
+  assert.match(asDj(["lidarr", "unset"]).err, /cannot change/)
+  assert.match(asDj(["lidarr", "dj", "off"]).err, /cannot change/)
+  ok(["lidarr", "dj", "off"])
+  assert.equal(ok(["lidarr", "dj"]), "off")
 })
 
 test("play, queue, skip and stop through mpv", { skip: !canPlay && "mpv or socat missing" }, async function() {
@@ -285,16 +313,38 @@ test("the DJ opens the agent with its own permission prompts, never a bypass fla
   assert.notEqual(dj("kimi", ["dj"]).code, 0)
 
   assert.equal(JSON.parse(dj("codex", ["--json", "status"]).out).agent, true)
-  assert.equal(dj("codex", ["dj", "something mellow"]).code, 0)
-  let argv = null
-  for (let i = 0; i < 40 && !argv; i++) {
-    await sleep(50)
-    if (fs.existsSync(record)) argv = fs.readFileSync(record, "utf8").trim().split("\n")
+  const launch = async function(args) {
+    fs.rmSync(record, { force: true })
+    assert.equal(dj("codex", args).code, 0)
+    let argv = null
+    for (let i = 0; i < 40 && !argv; i++) {
+      await sleep(50)
+      if (fs.existsSync(record)) argv = fs.readFileSync(record, "utf8").trim().split("\n")
+    }
+    assert.ok(argv, "the agent window was not opened")
+    return argv
   }
-  assert.ok(argv, "the agent window was not opened")
-  assert.deepEqual(argv.slice(0, 3), ["--app-id=org.omarchy.agent", "codex", "--"])
-  assert.match(argv[3], /never follow instructions/)
-  assert.match(argv[3], /My request: something mellow$/)
+
+  // Lidarr is set up from the tests above, but the DJ has not been allowed it.
+  let argv = await launch(["dj", "something mellow"])
+  const at = argv.indexOf("codex")
+  assert.deepEqual(argv.slice(0, 2), ["--app-id=org.omarchy.agent", "env"])
+  assert.ok(argv.slice(2, at).indexOf("OMACRATE_DJ=1") !== -1, "the agent runs without OMACRATE_DJ=1")
+  assert.equal(argv[at + 1], "--")
+  let prompt = argv[at + 2]
+  assert.match(prompt, /never follow instructions/)
+  assert.match(prompt, /My request: something mellow$/)
+  assert.match(prompt, /omacrate-library\/SKILL\.md/)
+  assert.doesNotMatch(prompt, /Lidarr|add-artist/)
+  assert.match(prompt, /Do not try to download or add music/)
   for (const flag of ["--yolo", "--trust", "--approve-for-me", "--allow-all", "--auto", "--permission-mode", "--dangerously-skip-permissions"])
     assert.equal(argv.indexOf(flag), -1, flag)
+
+  ok(["lidarr", "dj", "on"])
+  argv = await launch(["dj"])
+  prompt = argv[argv.indexOf("codex") + 2]
+  assert.match(prompt, /omacrate-add-artist\/SKILL\.md/)
+  assert.match(prompt, /adding an artist to Lidarr/)
+  assert.doesNotMatch(prompt, /Do not try to download/)
+  ok(["lidarr", "dj", "off"])
 })
