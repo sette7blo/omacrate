@@ -36,6 +36,10 @@ Panel {
   readonly property var current: service ? service.current : null
   readonly property string loginState: service ? service.loginState : ""
   readonly property string user: service ? service.link.user : ""
+  // The Plex server and user. A delete or artwork change is bound to the one
+  // it was asked for on; the CLI refuses it on any other.
+  readonly property string connection: service ? service.link.connection : ""
+  onConnectionChanged: root.pendingDelete = null
   readonly property bool home: service ? service.link.home === true : false
   readonly property bool djOn: service ? service.options.dj === true && service.agentReady === true : false
 
@@ -92,9 +96,9 @@ Panel {
   // The open playlist, or else the selected playlist row.
   readonly property var playlistTarget: {
     if (!linked) return null
-    if (view && view.within === "playlist" && Model.isKey(view.key)) return { key: view.key, title: view.title }
+    if (view && view.within === "playlist" && Model.isKey(view.key)) return { key: view.key, title: view.title, connection: root.connection }
     var row = rows[cursor]
-    if (row && row.kind === "playlist" && Model.isKey(row.key)) return { key: row.key, title: row.title }
+    if (row && row.kind === "playlist" && Model.isKey(row.key)) return { key: row.key, title: row.title, connection: root.connection }
     return null
   }
 
@@ -109,7 +113,7 @@ Panel {
     var target = root.pendingDelete
     root.pendingDelete = null
     if (!target) return
-    act(["playlist", "delete", target.key], function() {
+    act(["playlist", "delete", "--connection", target.connection, target.key], function() {
       if (root.view && root.view.within === "playlist" && root.view.key === target.key) root.back()
       var views = ({})
       for (var k in root.tabViews) if (k !== "playlists") views[k] = root.tabViews[k]
@@ -142,9 +146,16 @@ Panel {
     onExited: function(code) {
       var target = pickProc.target
       pickProc.target = null
-      var file = String(pickOut.text || "").split("\n")[0]
-      if (code !== 0 || !target || file.indexOf("/") !== 0) return
-      act(["playlist", "art", target.key, file], function() {
+      // One path, ended by one newline. A name that itself holds a newline
+      // could stand for another file, so it is refused rather than cut.
+      var out = String(pickOut.text || "")
+      var file = out.slice(-1) === "\n" ? out.slice(0, -1) : out
+      if (code !== 0 || !target) return
+      if (file.indexOf("/") !== 0 || file.indexOf("\n") !== -1 || file.indexOf("\r") !== -1) {
+        Util.execArgv(["notify-send", "-a", "Omacrate", "-u", "critical", "Playlist artwork not set", "That file name cannot be used. Rename the file and pick it again."])
+        return
+      }
+      act(["playlist", "art", "--connection", target.connection, target.key, file], function() {
         Util.execArgv(["notify-send", "-a", "Omacrate", "Playlist artwork set", "Plex shows the new picture for this playlist."])
       }, function(error) {
         Util.execArgv(["notify-send", "-a", "Omacrate", "-u", "critical", "Playlist artwork not set", error])

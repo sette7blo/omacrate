@@ -302,6 +302,11 @@ The key is read from the prompt or from stdin, never from the command line.
 - Every request to Plex and Lidarr ignores your curl configuration
   (`~/.curlrc`), refuses redirects and checks certificates, so the token and
   the Lidarr key stay with the address they were meant for.
+- Each request to Plex or Lidarr uses one read of the saved connection: the
+  address, and the token or key that belongs to it. Changing server or Plex
+  Home user saves nothing until the new server has answered with its own
+  token. A playlist delete or artwork change only acts on the server and user
+  it was asked for on.
 - The Lidarr API key goes only to the address you enter, without following
   redirects. Plain http to another computer needs your explicit yes first;
   prefer an https address if Lidarr has one.

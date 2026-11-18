@@ -44,6 +44,7 @@ const lidarrArtists = [
 ]
 
 const log = []
+let identityDown = false
 let pinPolls = 0
 
 function wav(seconds) {
@@ -116,7 +117,7 @@ function route(req, url, body) {
   }
 
   if (req.headers["x-plex-token"] !== SERVER_TOKEN && req.headers["x-plex-token"] !== OTHER_SERVER_TOKEN) return 401
-  if (p === "/identity") return { MediaContainer: { machineIdentifier: "machine-1" } }
+  if (p === "/identity") return identityDown ? 500 : { MediaContainer: { machineIdentifier: "machine-1" } }
   if (p === "/library/sections") {
     return { MediaContainer: { Directory: [{ key: "1", type: "movie", title: "Films" }, { key: "3", type: "artist", title: "Music" }] } }
   }
@@ -176,6 +177,11 @@ const server = http.createServer(function(req, res) {
     if (url.pathname === "/__log") {
       res.setHeader("Content-Type", "application/json")
       return res.end(JSON.stringify(log))
+    }
+    // POST /__identity with "down" makes every server address fail its check.
+    if (url.pathname === "/__identity") {
+      identityDown = body.trim() === "down"
+      return res.end("ok")
     }
     log.push({
       method: req.method, host: req.headers.host || "", path: url.pathname, query: url.search, body: body,

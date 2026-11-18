@@ -6,6 +6,25 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- Every Plex request reads the server address and its token in one read of the saved
+  connection, so a server change made at the same moment can never pair one server's
+  address with the other server's token. Choosing a server (`omacrate server`, a login, an
+  automatic address lookup, switching Plex Home user) checks each candidate address with
+  that server's own token and saves server, token, address and libraries in one write;
+  nothing is saved if no address answers. Changes to the saved credentials are made one
+  at a time.
+- Lidarr requests read the address, the key and the consent to plain http together, so
+  the key and the consent always belong to the address the request goes to.
+- A playlist delete waiting for confirmation, or an artwork change waiting for the file
+  picker, is tied to the Plex server and user it was asked for on: the panel passes them
+  as `--connection`, and the CLI refuses the action if either changed. A switch also
+  drops a pending delete.
+- The panel takes the picked file's path whole and refuses a name that contains a
+  newline. The CLI reads the picture once, at most just over 10 MB, into a private
+  folder, and checks and uploads that copy, so a file replaced after the check is never
+  sent.
+
 ## [v0.2.4] - 2026-11-18
 
 ### Security
