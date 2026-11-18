@@ -280,12 +280,13 @@ Column {
     }
 
     // A second yes, so the agent's provider does not learn what you download
-    // or that Lidarr is there unless you want it to.
+    // or that Lidarr is there unless you want it to. It does not hide the key
+    // from an agent running as the user; the description says so.
     Toggle {
       width: parent.width
       visible: root.options.dj && root.lidarrAddress !== ""
       label: "Let the DJ use Lidarr"
-      description: "Off: the DJ cannot look up or add artists, and is not told that Lidarr is there."
+      description: "Off: the DJ is not told that Lidarr is there, and omacrate refuses it every Lidarr command. This is not a lock: the agent runs as you and could still read the saved Lidarr key."
       checked: root.service ? root.service.lidarrDj : false
       foreground: root.foreground
       accent: root.accent

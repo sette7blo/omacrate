@@ -6,6 +6,20 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- The launcher (`omacrate.desktop`) runs the plugin's own `bin/omacrate` instead of
+  `~/.local/bin/omacrate`, which may belong to another program when the installer left
+  it alone. Launchers written by earlier versions are rewritten on the next load. If
+  the plugin folder's path holds characters a launcher cannot carry safely, no launcher
+  is made.
+- The DJ is given the full path of `bin/omacrate` and told to run it by that path, for
+  the same reason.
+
+### Changed
+- The **Let the DJ use Lidarr** setting, the README and the privacy notes now say plainly
+  that the setting is not a lock: an agent runs as you and can read the saved Plex token
+  and Lidarr key whatever the setting.
+
 ## [v0.2.0] - 2026-11-18
 
 ### Changed
