@@ -285,9 +285,9 @@ The key is read from the prompt or from stdin, never from the command line.
   managed user that is shared the music library alone.
 - The plugin talks to `plex.tv` (login and finding your server), to your
   server, and to Lidarr if you set it up. Nothing else.
-- Tokens travel in headers, never in an address, and reach `curl` and `mpv`
-  through stdin and a mode-600 file, so they do not show in a process
-  listing.
+- Tokens travel in headers, never in an address, and reach `curl` through
+  stdin and `mpv` through its private control socket, so they do not show in
+  a process listing.
 - Your server is reached over https only (Plex's own `plex.direct`
   addresses); plain http is used only for a server on this same computer.
   If Secure connections is disabled in the Plex server settings, omacrate
@@ -295,8 +295,10 @@ The key is read from the prompt or from stdin, never from the command line.
 - mpv only opens stream paths of Plex's own form (`/library/parts/...`) on
   the linked server, checks the server's certificate (mpv does not by
   default), refuses redirects instead of following them with the token, and
-  never hands a stream address to yt-dlp. The token it sends stays with the
-  linked server.
+  never hands a stream address to yt-dlp. mpv holds no token of its own:
+  each queued track carries the token of the server it was queued from, so
+  a track never sends one server's token to another. Switching server, Plex
+  Home user or account stops the player and empties the queue.
 - Every request to Plex and Lidarr ignores your curl configuration
   (`~/.curlrc`), refuses redirects and checks certificates, so the token and
   the Lidarr key stay with the address they were meant for.
