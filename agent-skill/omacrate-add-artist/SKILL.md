@@ -19,8 +19,9 @@ If that says Lidarr is not available to the DJ, tell the user they can
 allow it in the omacrate settings (the gear, AI DJ section), and stop. If it
 says Lidarr is not set up, tell the user to fill in the Lidarr
 address and API key in the omacrate settings (the gear in the panel), or to
-run `omacrate lidarr set http://<address>:8686` themselves (it asks for the
-API key), and stop. Never ask for the key or put one on a command line.
+run `omacrate lidarr set https://<address>` themselves (it asks for the
+API key), and stop. If it says the address is plain http, tell the user,
+and stop: only they can decide to send the key unencrypted. Never ask for the key or put one on a command line.
 
 ## Steps
 

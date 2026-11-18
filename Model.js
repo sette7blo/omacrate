@@ -124,6 +124,14 @@ function isKey(value) {
   return /^(playlist:)?[0-9]{1,12}$/.test(String(value || ""))
 }
 
+// Plain http to another computer sends the Lidarr key unencrypted; the same
+// rule as lidarr_cleartext in bin/omacrate.
+function lidarrCleartext(address) {
+  var s = String(address || "").trim()
+  if (!/^http:\/\//.test(s)) return false
+  return !/^http:\/\/(localhost|127\.[0-9]+\.[0-9]+\.[0-9]+|\[::1\])(:[0-9]+)?(\/.*)?$/.test(s)
+}
+
 function item(raw) {
   if (!raw || typeof raw !== "object") return null
   var type = String(raw.type || "")
@@ -407,7 +415,7 @@ if (typeof module !== "undefined" && module.exports) {
     TIME_REQUEST: TIME_REQUEST,
     text: text, clock: clock, settings: settings, pluginSettings: pluginSettings,
     settingsPayload: settingsPayload, linkInfo: linkInfo, sameLink: sameLink,
-    linkSummary: linkSummary, isKey: isKey, item: item, items: items, parseQueue: parseQueue,
+    linkSummary: linkSummary, isKey: isKey, lidarrCleartext: lidarrCleartext, item: item, items: items, parseQueue: parseQueue,
     rows: rows, queueRows: queueRows, tabs: tabs, nextTab: nextTab, tabRequest: tabRequest,
     usersRequest: usersRequest, listRequest: listRequest,
     playArgs: playArgs, addArgs: addArgs, userRows: userRows, userArgs: userArgs, hints: hints, mpvLine: mpvLine,

@@ -515,7 +515,10 @@ start_player() {
   local token
   token="$(cred .plex.serverToken)"
   is_token "$token" || die "the saved Plex token is not valid. Run: omacrate login"
-  ( umask 077; printf 'http-header-fields=X-Plex-Token: %s\n' "$token" > "$MPV_CONF" )
+  # The token goes only to the server it was issued for: certificates are
+  # checked (mpv does not by default), a redirect is refused rather than
+  # followed with the header, and yt-dlp is never handed a stream address.
+  ( umask 077; printf 'http-header-fields=X-Plex-Token: %s\ntls-verify=yes\nstream-lavf-o=max_redirects=0\nytdl=no\n' "$token" > "$MPV_CONF" )
   local args=(--no-config "--include=$MPV_CONF" --idle=once --no-video --no-terminal
     --audio-display=no --gapless-audio=weak "--volume=$(saved_volume)" "--input-ipc-server=$SOCK") lib extra=()
   # Media keys, when the mpv MPRIS plugin is installed.
@@ -674,6 +677,15 @@ cmd_queue() {
 
 lidarr_ready() { [[ -n "$(cred .lidarr.baseUrl)" && -n "$(cred .lidarr.apiKey)" ]]; }
 
+# Plain http to this computer never leaves it. To any other host the key
+# crosses the network unencrypted, so it is sent only after the user has said
+# yes to that (--allow-http, or the switch in the settings).
+lidarr_cleartext() {
+  [[ "$1" =~ ^http:// ]] || return 1
+  ! [[ "$1" =~ ^http://(localhost|127\.[0-9]+\.[0-9]+\.[0-9]+|\[::1\])(:[0-9]+)?(/.*)?$ ]]
+}
+lidarr_http_allowed() { [[ "$(cred .lidarr.allowHttp)" == true ]]; }
+
 # The DJ runs with OMACRATE_DJ=1. Lidarr is closed to it unless the user has
 # allowed it, so the agent's provider does not even learn that Lidarr is there.
 # Changing the Lidarr settings is never open to it. This only governs what
@@ -684,6 +696,9 @@ in_dj() { [[ "${OMACRATE_DJ:-}" == 1 ]]; }
 # lidarr <METHOD> <path below /api/v1> [json body]
 lidarr() {
   lidarr_ready || die "Lidarr is not set up. Run: omacrate lidarr set <address>"
+  if lidarr_cleartext "$(cred .lidarr.baseUrl)" && ! lidarr_http_allowed; then
+    die "the Lidarr address is plain http, so the key would cross the network unencrypted. Use an https address, or allow it: omacrate lidarr set --allow-http <address>"
+  fi
   local args=(-fsS -m 60 --proto '=http,https' -X "$1" -K -)
   [[ -z "${3:-}" ]] || args+=(-H 'Content-Type: application/json' --data-binary "$3")
   printf 'header = "X-Api-Key: %s"\nheader = "Accept: application/json"\n' "$(cred .lidarr.apiKey)" \
@@ -702,19 +717,31 @@ cmd_lidarr() {
   case "$action" in
     set)
       # The API key is read from stdin so it stays out of the process listing.
-      local address="${1:-}" key=""
-      [[ "$address" =~ ^https?://[^[:space:]\"\\]+$ ]] || die "usage: omacrate lidarr set <http address>   (the API key is read from stdin)"
+      local address="" key="" allow_http=false
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --allow-http) allow_http=true; shift ;;
+          *) [[ -z "$address" ]] || die "usage: omacrate lidarr set [--allow-http] <address>"; address="$1"; shift ;;
+        esac
+      done
+      [[ "$address" =~ ^https?://[^[:space:]\"\\]+$ ]] || die "usage: omacrate lidarr set [--allow-http] <address>   (the API key is read from stdin)"
+      if lidarr_cleartext "$address"; then
+        $allow_http || die "$address is plain http: the key would cross your network unencrypted. Use an https address, or pass --allow-http to send it anyway"
+      else
+        allow_http=false
+      fi
       if [[ -t 0 ]]; then read -r -s -p "Lidarr API key: " key || true; echo; else read -r key || true; fi
       key="${key//[[:space:]]/}"
       [[ "$key" =~ ^[A-Za-z0-9]{20,64}$ ]] || die "that does not look like a Lidarr API key"
-      ADDRESS="${address%/}" KEY="$key" cred_update '.lidarr = {baseUrl: env.ADDRESS, apiKey: env.KEY}'
+      ADDRESS="${address%/}" KEY="$key" HTTP="$allow_http" \
+        cred_update '.lidarr = {baseUrl: env.ADDRESS, apiKey: env.KEY} + (if env.HTTP == "true" then {allowHttp: true} else {} end)'
       lidarr GET /system/status | jq -r '"Connected to \(.appName // "Lidarr") \(.version // "")"' \
         || die "saved, but Lidarr did not answer at $address"
       ;;
     address)
       # The address only, never the key: the settings view shows it.
       if $JSON; then
-        jq -c '{address: (.lidarr.baseUrl // ""), dj: (.lidarr.dj == true)}' "$CRED" 2>/dev/null || echo '{"address":"","dj":false}'
+        jq -c '{address: (.lidarr.baseUrl // ""), dj: (.lidarr.dj == true), allowHttp: (.lidarr.allowHttp == true)}' "$CRED" 2>/dev/null || echo '{"address":"","dj":false,"allowHttp":false}'
       else cred .lidarr.baseUrl; fi
       ;;
     dj)
@@ -924,7 +951,9 @@ Player:
   volume [0-100 | +5 | -5]   Player volume, kept for the next start
 
 Lidarr (optional, for adding artists you do not have):
-  lidarr set <address>       Save the address; the API key is read from stdin
+  lidarr set [--allow-http] <address>
+                             Save the address; the API key is read from stdin. Plain
+                             http to another computer needs --allow-http
   lidarr lookup <artist>     Find an artist and its id
   lidarr profiles            Root folders and profiles
   lidarr add <id> [--root <path>] [--quality <id>] [--metadata <id>]

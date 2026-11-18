@@ -27,6 +27,8 @@ Column {
 
   readonly property string lidarrAddress: service ? service.lidarrAddress : ""
   property bool editLidarr: false
+  // The yes to sending the key over plain http, asked again on every save.
+  property bool lidarrHttpOk: false
 
   Component.onCompleted: {
     if (!root.service) return
@@ -135,7 +137,7 @@ Column {
       id: lidarrAddressField
       width: parent.width
       visible: lidarrSection.showForm
-      placeholderText: "Address, e.g. http://192.168.1.10:8686"
+      placeholderText: "Address, e.g. https://lidarr.home.lan"
       text: root.lidarrAddress
       foreground: root.foreground
       accent: root.accent
@@ -151,6 +153,28 @@ Column {
       accent: root.accent
       Keys.onReturnPressed: lidarrSave.clicked()
     }
+    // Shown only for plain http to another computer, and off each time.
+    Toggle {
+      width: parent.width
+      visible: lidarrSection.showForm && Model.lidarrCleartext(lidarrAddressField.text)
+      label: "Send the key over plain http"
+      description: "This address is not https, so the API key and every request cross your network unencrypted, readable by anyone who can watch it. Use an https address if Lidarr has one."
+      checked: root.lidarrHttpOk
+      foreground: root.foreground
+      accent: root.accent
+      fontFamily: root.fontFamily
+      onClicked: root.lidarrHttpOk = !root.lidarrHttpOk
+    }
+    Text {
+      textFormat: Text.PlainText
+      width: parent.width
+      visible: !lidarrSection.showForm && Model.lidarrCleartext(root.lidarrAddress) && !(root.service && root.service.lidarrAllowHttp)
+      text: "Paused: this address is plain http and sending the key over it has not been allowed. Press Change to use an https address or to allow it."
+      color: Commons.Color.urgent
+      wrapMode: Text.WordWrap
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+    }
     Row {
       spacing: Style.spacing.lg
 
@@ -161,14 +185,17 @@ Column {
         enabled: !(root.service && root.service.lidarrBusy)
           && /^https?:\/\/\S+$/.test(lidarrAddressField.text.trim())
           && lidarrKeyField.text.trim().length >= 20
+          && (root.lidarrHttpOk || !Model.lidarrCleartext(lidarrAddressField.text))
         bordered: true
         foreground: root.foreground
         accent: root.accent
         fontFamily: root.fontFamily
         onClicked: {
           if (!enabled || !root.service) return
-          root.service.saveLidarr(lidarrAddressField.text, lidarrKeyField.text)
+          root.service.saveLidarr(lidarrAddressField.text, lidarrKeyField.text,
+            root.lidarrHttpOk && Model.lidarrCleartext(lidarrAddressField.text))
           lidarrKeyField.text = ""
+          root.lidarrHttpOk = false
           root.editLidarr = false
         }
       }
@@ -180,6 +207,7 @@ Column {
         fontFamily: root.fontFamily
         onClicked: {
           lidarrKeyField.text = ""
+          root.lidarrHttpOk = false
           root.editLidarr = false
         }
       }
@@ -192,6 +220,7 @@ Column {
         fontFamily: root.fontFamily
         onClicked: {
           lidarrAddressField.text = root.lidarrAddress
+          root.lidarrHttpOk = false
           root.editLidarr = true
         }
       }
