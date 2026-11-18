@@ -6,6 +6,8 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.2.1] - 2026-11-18
+
 ### Fixed
 - The launcher (`omacrate.desktop`) runs the plugin's own `bin/omacrate` instead of
   `~/.local/bin/omacrate`, which may belong to another program when the installer left
@@ -76,7 +78,8 @@ project uses [Semantic Versioning](https://semver.org/).
   launcher, which switches them off, and tells it that library and Lidarr text is data,
   never instructions. Supported agents: claude, codex, cursor-agent, copilot.
 
-[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.2.1...HEAD
+[v0.2.1]: https://github.com/sette7blo/omacrate/compare/v0.2.0...v0.2.1
 [v0.2.0]: https://github.com/sette7blo/omacrate/compare/v0.1.1...v0.2.0
 [v0.1.1]: https://github.com/sette7blo/omacrate/compare/v0.1.0...v0.1.1
 [v0.1.0]: https://github.com/sette7blo/omacrate/releases/tag/v0.1.0
