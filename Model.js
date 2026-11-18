@@ -98,8 +98,13 @@ function linkInfo(raw) {
     var title = text(sections[i] && sections[i].title, 60)
     if (title) libraries.push(title)
   }
+  // The server and Plex Home user, as the CLI names them for --connection.
+  var id = /^[A-Za-z0-9._-]{1,80}$/
+  var machine = typeof plex.machineId === "string" && id.test(plex.machineId) ? plex.machineId : "none"
+  var who = typeof plex.userUuid === "string" && id.test(plex.userUuid) ? plex.userUuid : "account"
   return {
     linked: !!plex.serverUri && !!plex.serverToken,
+    connection: machine + "/" + who,
     server: text(plex.serverName, 60),
     user: text(plex.user, 60),
     home: plex.home === true,

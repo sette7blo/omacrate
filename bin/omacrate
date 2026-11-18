@@ -38,9 +38,14 @@ cred() {
 
 # cred_update <jq filter>: secrets reach jq through the environment, never
 # through its command line.
+# Changes are made one at a time (flock), and each replaces the file in one
+# rename, so a reader always sees one whole version.
 cred_update() {
   prepare
-  local tmp
+  need flock
+  local tmp lock
+  exec {lock}>"$STATE_DIR/.credentials.lock"
+  flock "$lock"
   tmp="$(mktemp -p "$STATE_DIR" .tmp.XXXXXX)"
   if jq "$1" "$CRED" > "$tmp"; then
     chmod 600 "$tmp"
@@ -49,6 +54,27 @@ cred_update() {
     rm -f "$tmp"
     die "could not update $CRED"
   fi
+  exec {lock}>&-
+}
+
+# One read of the Plex connection: the server address, its token, the server
+# and the Plex Home user, all from the same version of the file. A request
+# uses one such snapshot, so it never pairs one server's address with another
+# server's token. CONN_ID names the server and user, for actions that must
+# stay on the connection they were started on.
+conn_read() {
+  local line=""
+  [[ -r "$CRED" ]] && line="$(jq -r '[.plex.serverUri // "", .plex.serverToken // "", .plex.machineId // "",
+    (.plex.userUuid // "account"), .plex.serverName // ""] | @tsv' "$CRED" 2>/dev/null)" || true
+  IFS=$'\t' read -r CONN_URI CONN_TOKEN CONN_MACHINE CONN_USER CONN_NAME <<<"$line" || true
+  CONN_ID="${CONN_MACHINE:-none}/${CONN_USER:-account}"
+}
+
+# Set by --connection: the request is refused if the connection changed.
+EXPECT_CONN=""
+conn_check() {
+  [[ -z "$EXPECT_CONN" || "$EXPECT_CONN" == "$CONN_ID" ]] \
+    || die "the Plex server or user changed since this was asked for; nothing was done"
 }
 
 client_id() {
@@ -86,28 +112,35 @@ plextv() {
   plex_headers "${3:-}" | http_request -fsS -m 20 --proto "$([[ "$PLEX_TV" == https://* ]] && echo '=https' || echo '=http')" -X "$1" -K - -- "$PLEX_TV$2"
 }
 
+# plex_at <base> <method> <path> <timeout> <token>: the token is always the
+# one that belongs to that base.
 plex_at() {
-  local base="$1" method="$2" path="$3" timeout="${4:-30}"
-  plex_headers "$(cred .plex.serverToken)" \
+  local base="$1" method="$2" path="$3" timeout="${4:-30}" token="${5:-}"
+  [[ -n "$token" ]] || die "no Plex token for $base"
+  plex_headers "$token" \
     | http_request -fsS -m "$timeout" --proto '=http,https' -X "$method" -K - -- "$base$path"
 }
 
 # The account's own token, or the token of the Plex Home user switched to.
 active_token() { cred '.plex.userToken // .plex.token'; }
 
-linked() { [[ -n "$(cred .plex.serverUri)" && -n "$(cred .plex.serverToken)" ]]; }
+linked() { conn_read; [[ -n "$CONN_URI" && -n "$CONN_TOKEN" ]]; }
 require_link() { linked || die "not linked to Plex. Run: omacrate login"; }
 
 # plex <METHOD> <path>: when the saved address stops answering (another
 # network, a new server address), look the server up again once and retry.
 plex() {
   require_link
+  conn_read
+  conn_check
   local rc=0
-  plex_at "$(cred .plex.serverUri)" "$1" "$2" 2>/dev/null && return 0 || rc=$?
+  plex_at "$CONN_URI" "$1" "$2" 30 "$CONN_TOKEN" 2>/dev/null && return 0 || rc=$?
   case "$rc" in
     6|7|28|35|60)
-      ( resolve_server "$(cred .plex.serverName)" ) >/dev/null 2>&1 || die "the Plex server does not answer"
-      plex_at "$(cred .plex.serverUri)" "$1" "$2" ;;
+      ( resolve_server "$CONN_NAME" ) >/dev/null 2>&1 || die "the Plex server does not answer"
+      conn_read
+      conn_check
+      plex_at "$CONN_URI" "$1" "$2" 30 "$CONN_TOKEN" ;;
     22) die "the Plex server refused the request ($1 ${2%%\?*})" ;;
     *) die "request to the Plex server failed (curl exit $rc)" ;;
   esac
@@ -116,9 +149,13 @@ plex() {
 # Picks a server from the account and the first of its addresses that answers:
 # local ones first, a relay last. The token travels with every request, so
 # only https addresses are used; plain http only on this computer.
+# Nothing is saved until an address of the chosen server has answered with
+# that server's own token; then server, token, address and libraries are
+# saved in one write. RESOLVE_TOKEN (a Plex Home user's token) and
+# RESOLVE_EXTRA (a jq filter) let a user switch land in that same write.
 resolve_server() {
-  local want="${1:-}" token resources server name
-  token="$(active_token)"
+  local want="${1:-}" token resources server name stoken machine
+  token="${RESOLVE_TOKEN:-$(active_token)}"
   [[ -n "$token" ]] || die "not linked to Plex. Run: omacrate login"
   resources="$(plextv GET '/resources?includeHttps=1&includeRelay=1' "$token")" \
     || die "could not read the server list from plex.tv"
@@ -128,21 +165,23 @@ resolve_server() {
       else (($s | map(select(.owned == true)) | first) // ($s | first)) end' <<<"$resources")"
   [[ -n "$server" && "$server" != "null" ]] || die "no Plex server found${want:+ named $want} on this account"
   name="$(jq -r '.name' <<<"$server")"
-  SERVER_TOKEN="$(jq -r '.accessToken // empty' <<<"$server")" MACHINE="$(jq -r '.clientIdentifier' <<<"$server")" \
-    NAME="$name" cred_update '.plex.serverName = env.NAME | .plex.serverToken = env.SERVER_TOKEN
-      | .plex.machineId = env.MACHINE | .plex.serverUri = ""'
+  stoken="$(jq -r '.accessToken // empty' <<<"$server")"
+  machine="$(jq -r '.clientIdentifier // empty' <<<"$server")"
+  is_token "$stoken" || die "plex.tv gave no usable token for the server $name"
+  [[ "$machine" =~ ^[A-Za-z0-9._-]{1,80}$ ]] || die "plex.tv gave no usable id for the server $name"
   local address found=""
   while IFS= read -r address; do
     [[ "$address" =~ ^https?://[^[:space:]\"\\]+$ ]] || continue
     [[ "$address" == https://* || "$address" =~ ^http://(127\.[0-9.]+|localhost|\[::1\])(:[0-9]+)?(/|$) ]] || continue
-    if plex_at "${address%/}" GET /identity 4 >/dev/null 2>&1; then found="${address%/}"; break; fi
+    if plex_at "${address%/}" GET /identity 4 "$stoken" >/dev/null 2>&1; then found="${address%/}"; break; fi
   done < <(jq -r '.connections // [] | sort_by([(.relay == true), (.local != true)]) | .[].uri' <<<"$server")
   [[ -n "$found" ]] || die "found the server $name, but none of its secure (https) addresses answers from here. Check that Secure connections is not disabled in the Plex server settings"
-  ADDRESS="$found" cred_update '.plex.serverUri = env.ADDRESS'
   local sections
-  sections="$(plex_at "$found" GET /library/sections \
+  sections="$(plex_at "$found" GET /library/sections 30 "$stoken" \
     | jq -c '[.MediaContainer.Directory // [] | .[] | select(.type == "artist") | {id: (.key | tostring), title: (.title // "")}]')"
-  SECTIONS="$sections" cred_update '.plex.sections = (env.SECTIONS | fromjson)'
+  NAME="$name" SERVER_TOKEN="$stoken" MACHINE="$machine" ADDRESS="$found" SECTIONS="$sections" \
+    cred_update '.plex.serverName = env.NAME | .plex.serverToken = env.SERVER_TOKEN | .plex.machineId = env.MACHINE
+      | .plex.serverUri = env.ADDRESS | .plex.sections = (env.SECTIONS | fromjson) | '"${RESOLVE_EXTRA:-.}"
   printf '%s\n' "$name"
 }
 
@@ -255,9 +294,11 @@ cmd_playlists() {
 # retry, so a picture is never sent twice.
 plex_upload() {
   require_link
-  plex_headers "$(cred .plex.serverToken)" \
+  conn_read
+  conn_check
+  plex_headers "$CONN_TOKEN" \
     | http_request -fsS -m 60 --proto '=http,https' -X POST -K - -H "Content-Type: $2" --data-binary "@$3" \
-      -- "$(cred .plex.serverUri)$1" >/dev/null || die "the Plex server did not take the picture"
+      -- "$CONN_URI$1" >/dev/null || die "the Plex server did not take the picture"
 }
 
 # Only JPEG and PNG, told apart by their first bytes rather than the name.
@@ -284,12 +325,25 @@ svg_to_png() {
 
 # Playlist items go in batches so the address stays short.
 playlist_uri() {
-  uri "server://$(cred .plex.machineId)/com.plexapp.plugins.library/library/metadata/$1"
+  conn_read
+  uri "server://$CONN_MACHINE/com.plexapp.plugins.library/library/metadata/$1"
 }
 
 cmd_playlist() {
   local action="${1:-}"
   shift || true
+  # --connection <server/user>, as the panel read it when the action was
+  # asked for: delete and art then refuse to act on any other connection.
+  local args=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --connection)
+        [[ "${2:-}" =~ ^[A-Za-z0-9._-]{1,80}/[A-Za-z0-9._-]{1,80}$ ]] || die "--connection takes <server>/<user>"
+        EXPECT_CONN="$2"; shift 2 ;;
+      *) args+=("$1"); shift ;;
+    esac
+  done
+  set -- "${args[@]}"
   case "$action" in
     create)
       local title="${1:-}"
@@ -334,16 +388,21 @@ cmd_playlist() {
       local target="${1:-}" file="${2:-}" mime size
       is_playlist "$target" && [[ -n "$file" ]] || die "usage: omacrate playlist art <playlist key> <image file>"
       [[ -f "$file" && -r "$file" ]] || die "cannot read $file"
-      size="$(stat -c %s -- "$file")"
+      # The file is read once, into a private folder, and the type check and
+      # the upload both use that copy: a file swapped in the picked folder
+      # afterwards is never sent. Reading stops just past the size limit.
+      ART_DIR="$(mktemp -d)"
+      trap 'rm -rf -- "$ART_DIR"' EXIT
+      timeout 20 head -c 10485761 -- "$file" > "$ART_DIR/picked" 2>/dev/null || die "cannot read $file"
+      size="$(stat -c %s -- "$ART_DIR/picked")"
       (( size > 0 && size <= 10485760 )) || die "the picture must be 10 MB or smaller"
-      if [[ "$file" == *.svg ]] && head -c 2048 -- "$file" | grep -q '<svg'; then
-        SVG_DIR="$(mktemp -d)"
-        trap 'rm -rf -- "$SVG_DIR"' EXIT
-        svg_to_png "$file" "$SVG_DIR"
-        file="$SVG_DIR/cover.png"
+      if [[ "$file" == *.svg ]] && head -c 2048 -- "$ART_DIR/picked" | grep -q '<svg'; then
+        svg_to_png "$ART_DIR/picked" "$ART_DIR"
+        file="$ART_DIR/cover.png"
         mime=image/png
       else
-        mime="$(image_type "$file")" || die "the picture must be a JPEG, PNG or SVG file"
+        mime="$(image_type "$ART_DIR/picked")" || die "the picture must be a JPEG, PNG or SVG file"
+        file="$ART_DIR/picked"
       fi
       plex_upload "/library/metadata/${target#playlist:}/posters" "$mime" "$file"
       if $JSON; then jq -cn --arg k "$target" '{key: $k, artwork: true}'; else echo "Set the artwork of $target"; fi
@@ -491,14 +550,14 @@ cmd_user() {
       || die "Plex refused the switch to $title${pin:+ (wrong PIN?)}"
     [[ -n "$token" ]] || die "Plex gave no token for $title"
   fi
-  before="$(jq -c '.plex' "$CRED")"
-  USER_TOKEN="$token" UUID="$uuid" TITLE="$title" cred_update '
-    (if env.USER_TOKEN == "" then del(.plex.userToken, .plex.userUuid)
-     else .plex.userToken = env.USER_TOKEN | .plex.userUuid = env.UUID end)
-    | .plex.user = env.TITLE'
-  if ! ( resolve_server "$(jq -r '.serverName // ""' <<<"$before")" ) >/dev/null 2>&1; then
-    BEFORE="$before" cred_update '.plex = (env.BEFORE | fromjson)'
-    die "$title has no access to the server $(cred .plex.serverName). Nothing changed."
+  # The user and the server token they get are saved together, and only once
+  # the server has answered with that token.
+  conn_read
+  if ! ( USER_TOKEN="$token" UUID="$uuid" TITLE="$title" RESOLVE_TOKEN="${token:-$(cred .plex.token)}" \
+    RESOLVE_EXTRA='(if env.USER_TOKEN == "" then del(.plex.userToken, .plex.userUuid)
+      else .plex.userToken = env.USER_TOKEN | .plex.userUuid = env.UUID end) | .plex.user = env.TITLE' \
+    resolve_server "$CONN_NAME" ) >/dev/null 2>&1; then
+    die "$title has no access to the server $CONN_NAME. Nothing changed."
   fi
   # The queued tracks carry the previous user's token, and the queue was theirs.
   drop_player
@@ -724,15 +783,22 @@ lidarr_dj_allowed() { [[ "$(cred .lidarr.dj)" == true ]]; }
 in_dj() { [[ "${OMACRATE_DJ:-}" == 1 ]]; }
 
 # lidarr <METHOD> <path below /api/v1> [json body]
+# The address, the key and the consent to plain http are read together, so
+# the key and the consent always belong to the address the request goes to.
 lidarr() {
-  lidarr_ready || die "Lidarr is not set up. Run: omacrate lidarr set <address>"
-  if lidarr_cleartext "$(cred .lidarr.baseUrl)" && ! lidarr_http_allowed; then
+  local line="" base key http
+  [[ -r "$CRED" ]] && line="$(jq -r '[.lidarr.baseUrl // "", .lidarr.apiKey // "", (.lidarr.allowHttp == true | tostring)] | @tsv' "$CRED" 2>/dev/null)" || true
+  IFS=$'\t' read -r base key http <<<"$line" || true
+  [[ -n "$base" && -n "$key" ]] || die "Lidarr is not set up. Run: omacrate lidarr set <address>"
+  [[ "$base" =~ ^https?://[^[:space:]\"\\]+$ ]] || die "the saved Lidarr address is not usable. Run: omacrate lidarr set <address>"
+  [[ "$key" =~ ^[A-Za-z0-9]{20,64}$ ]] || die "the saved Lidarr key is not usable. Run: omacrate lidarr set <address>"
+  if lidarr_cleartext "$base" && [[ "$http" != true ]]; then
     die "the Lidarr address is plain http, so the key would cross the network unencrypted. Use an https address, or allow it: omacrate lidarr set --allow-http <address>"
   fi
   local args=(-fsS -m 60 --proto '=http,https' -X "$1" -K -)
   [[ -z "${3:-}" ]] || args+=(-H 'Content-Type: application/json' --data-binary "$3")
-  printf 'header = "X-Api-Key: %s"\nheader = "Accept: application/json"\n' "$(cred .lidarr.apiKey)" \
-    | http_request "${args[@]}" -- "$(cred .lidarr.baseUrl)/api/v1$2"
+  printf 'header = "X-Api-Key: %s"\nheader = "Accept: application/json"\n' "$key" \
+    | http_request "${args[@]}" -- "$base/api/v1$2"
 }
 
 cmd_lidarr() {
@@ -969,6 +1035,8 @@ Library (keys in the second column feed the other commands):
   playlist delete <playlist key>
   playlist art <playlist key> <image file>
                              Set a JPEG, PNG or SVG as the playlist's artwork
+                             (delete and art take --connection <server>/<user>:
+                             refused if the Plex server or user is another one)
   scan                       Ask Plex to rescan the music library
 
 Player:

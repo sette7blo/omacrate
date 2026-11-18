@@ -119,11 +119,51 @@ test("a playlist gets artwork from a JPEG or PNG, and can be deleted", async fun
   }
   assert.notEqual(run(["playlist", "art", "playlist:901", path.join(tmp, "missing.png")]).code, 0)
   assert.notEqual(run(["playlist", "art", "901", png]).code, 0)
+  // A file name with a newline is used whole: the picture behind it is sent.
+  const odd = path.join(tmp, "cover\nnew.png")
+  fs.writeFileSync(odd, Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), Buffer.alloc(300)]))
+  assert.deepEqual(json(["playlist", "art", "playlist:901", odd]), { key: "playlist:901", artwork: true })
+  assert.equal((await requests()).filter(function(r) { return r.path === "/library/metadata/901/posters" }).pop().length, 308)
+  // A picture over 10 MB is refused without reading more than that.
+  const big = path.join(tmp, "big.png")
+  fs.writeFileSync(big, Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), Buffer.alloc(10485760)]))
+  assert.match(run(["playlist", "art", "playlist:901", big]).err, /10 MB/)
+
+  // An action asked for on another server or user is refused, and nothing is sent.
+  const before = (await requests()).length
+  assert.match(run(["playlist", "art", "--connection", "machine-2/account", "playlist:901", png]).err, /server or user changed/)
+  assert.match(run(["playlist", "delete", "--connection", "machine-1/bbbbbbbbbbbbbbbb", "playlist:901"]).err, /server or user changed/)
+  assert.notEqual(run(["playlist", "delete", "--connection", "../x", "playlist:901"]).code, 0)
+  assert.equal((await requests()).slice(before).filter(function(r) { return r.method !== "GET" }).length, 0)
 
   assert.notEqual(run(["playlist", "delete", "901"]).code, 0)
-  assert.deepEqual(json(["playlist", "delete", "playlist:901"]), { key: "playlist:901", deleted: true })
+  assert.deepEqual(json(["playlist", "delete", "--connection", "machine-1/account", "playlist:901"]), { key: "playlist:901", deleted: true })
   assert.equal(json(["playlists"]).some(function(p) { return p.key === "playlist:901" }), false)
   assert.notEqual(run(["playlist", "delete", "playlist:901"]).code, 0)
+})
+
+test("a server switch saves nothing until an address answers with that server's own token", async function() {
+  const saved = fs.readFileSync(credPath(), "utf8")
+  const cred = JSON.parse(saved)
+  cred.plex.serverToken = "stale-token-1"
+  fs.writeFileSync(credPath(), JSON.stringify(cred), { mode: 0o600 })
+  const stale = fs.readFileSync(credPath(), "utf8")
+  await fetch(base + "/__identity", { method: "POST", body: "down" })
+  try {
+    assert.notEqual(run(["server", "Crate"]).code, 0)
+    assert.equal(fs.readFileSync(credPath(), "utf8"), stale, "a failed switch leaves the saved connection as it was")
+  } finally {
+    await fetch(base + "/__identity", { method: "POST", body: "up" })
+  }
+  const before = (await requests()).length
+  assert.match(ok(["server", "Crate"]), /Using Crate/)
+  const probes = (await requests()).slice(before).filter(function(r) { return r.path === "/identity" || r.path === "/library/sections" })
+  assert.ok(probes.length >= 2)
+  for (const r of probes) assert.equal(r.plexToken, "srv-token-1", "probed with the server's own token, not the saved one")
+  const now = JSON.parse(fs.readFileSync(credPath(), "utf8"))
+  assert.equal(now.plex.serverToken, "srv-token-1")
+  assert.equal(now.plex.serverUri, base)
+  fs.writeFileSync(credPath(), saved, { mode: 0o600 })
 })
 
 test("tokens travel in headers, never in an address", async function() {
