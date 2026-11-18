@@ -6,6 +6,8 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.2.2] - 2026-11-18
+
 ### Security
 - Playback checks the Plex server's TLS certificate. mpv does not by default, so a
   machine in the middle could have read the token.
@@ -90,7 +92,8 @@ project uses [Semantic Versioning](https://semver.org/).
   launcher, which switches them off, and tells it that library and Lidarr text is data,
   never instructions. Supported agents: claude, codex, cursor-agent, copilot.
 
-[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.2.2...HEAD
+[v0.2.2]: https://github.com/sette7blo/omacrate/compare/v0.2.1...v0.2.2
 [v0.2.1]: https://github.com/sette7blo/omacrate/compare/v0.2.0...v0.2.1
 [v0.2.0]: https://github.com/sette7blo/omacrate/compare/v0.1.1...v0.2.0
 [v0.1.1]: https://github.com/sette7blo/omacrate/compare/v0.1.0...v0.1.1
