@@ -6,6 +6,8 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.2.5] - 2026-11-18
+
 ### Security
 - Every Plex request reads the server address and its token in one read of the saved
   connection, so a server change made at the same moment can never pair one server's
@@ -129,7 +131,8 @@ project uses [Semantic Versioning](https://semver.org/).
   launcher, which switches them off, and tells it that library and Lidarr text is data,
   never instructions. Supported agents: claude, codex, cursor-agent, copilot.
 
-[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.2.5...HEAD
+[v0.2.5]: https://github.com/sette7blo/omacrate/compare/v0.2.4...v0.2.5
 [v0.2.4]: https://github.com/sette7blo/omacrate/compare/v0.2.3...v0.2.4
 [v0.2.3]: https://github.com/sette7blo/omacrate/compare/v0.2.2...v0.2.3
 [v0.2.2]: https://github.com/sette7blo/omacrate/compare/v0.2.1...v0.2.2
