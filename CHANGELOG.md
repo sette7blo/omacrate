@@ -6,6 +6,8 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.2.7] - 2026-11-19
+
 ### Security
 - A login saved before sessions existed is given a session, under the lock, before any
   server lookup starts, and a lookup never saves when it has no session to check against.
@@ -164,7 +166,8 @@ project uses [Semantic Versioning](https://semver.org/).
   launcher, which switches them off, and tells it that library and Lidarr text is data,
   never instructions. Supported agents: claude, codex, cursor-agent, copilot.
 
-[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.2.6...HEAD
+[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.2.7...HEAD
+[v0.2.7]: https://github.com/sette7blo/omacrate/compare/v0.2.6...v0.2.7
 [v0.2.6]: https://github.com/sette7blo/omacrate/compare/v0.2.5...v0.2.6
 [v0.2.5]: https://github.com/sette7blo/omacrate/compare/v0.2.4...v0.2.5
 [v0.2.4]: https://github.com/sette7blo/omacrate/compare/v0.2.3...v0.2.4
