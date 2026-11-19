@@ -243,6 +243,81 @@ test("a server lookup overtaken by a user switch saves nothing, and its retry do
   ok(["user", "papa"])
 })
 
+test("a login from before sessions gets one before a lookup, and a logout still wins", async function() {
+  const strip = function() {
+    const cred = JSON.parse(fs.readFileSync(credPath(), "utf8"))
+    delete cred.plex.session
+    delete cred.plex.sessionFrom
+    fs.writeFileSync(credPath(), JSON.stringify(cred), { mode: 0o600 })
+  }
+  // The panel asks with the old connection; it is the same login, so it is
+  // answered, and the login now has a session.
+  strip()
+  const legacy = connOf(plexCred())
+  assert.ok(Array.isArray(JSON.parse(ok(["--json", "--connection", legacy, "playlists"]))))
+  assert.match(plexCred().session, /^[0-9a-f]{16}$/)
+  assert.equal(plexCred().sessionFrom, "legacy")
+  assert.ok(Array.isArray(JSON.parse(ok(["--json", "--connection", legacy, "playlists"]))))
+  // After a user switch the old connection is refused again.
+  ok(["user", "kid"])
+  assert.equal(plexCred().sessionFrom, undefined)
+  assert.match(run(["--json", "--connection", legacy, "playlists"]).err, /changed/)
+  ok(["user", "papa"])
+
+  // A lookup that starts on such a login, overtaken by a logout.
+  strip()
+  const r = await overtaken(function() { ok(["logout"]) })
+  assert.notEqual(r.code, 0)
+  assert.equal(JSON.parse(fs.readFileSync(credPath(), "utf8")).plex, undefined, "still logged out")
+  ok(["login", "--start"])
+  assert.equal(ok(["login", "--wait", "77"]), "linked")
+})
+
+test("a retry and a user switch stay on the same server when another has its name", async function() {
+  await fetch(base + "/__twin", { method: "POST", body: "on" })
+  try {
+    const cred = JSON.parse(fs.readFileSync(credPath(), "utf8"))
+    cred.plex.serverUri = "http://127.0.0.1:1"
+    fs.writeFileSync(credPath(), JSON.stringify(cred), { mode: 0o600 })
+    assert.equal(json(["artists"]).length, 2)
+    assert.equal(plexCred().machineId, "machine-1")
+    assert.equal(plexCred().serverToken, "srv-token-1")
+    ok(["user", "kid"])
+    assert.equal(plexCred().machineId, "machine-1", "the user switch stayed on the same server")
+    ok(["user", "papa"])
+    assert.equal(plexCred().machineId, "machine-1")
+  } finally {
+    await fetch(base + "/__twin", { method: "POST", body: "off" })
+  }
+})
+
+test("artwork from a folder or file another account can change is refused", function() {
+  const png = Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), Buffer.alloc(40)])
+  const shared = path.join(tmp, "shared")
+  fs.mkdirSync(shared, { recursive: true })
+  fs.chmodSync(shared, 0o777)
+  fs.writeFileSync(path.join(shared, "x.png"), png)
+  assert.match(run(["playlist", "art", "playlist:900", path.join(shared, "x.png")]).err, /folder another account can change/)
+  // A link of ours that leads into such a folder is refused too.
+  fs.symlinkSync(path.join(shared, "x.png"), path.join(tmp, "into-shared.png"))
+  assert.match(run(["playlist", "art", "playlist:900", path.join(tmp, "into-shared.png")]).err, /folder another account can change/)
+  const open = path.join(tmp, "open.png")
+  fs.writeFileSync(open, png)
+  fs.chmodSync(open, 0o666)
+  assert.match(run(["playlist", "art", "playlist:900", open]).err, /can be changed by another account/)
+  const fifo = path.join(tmp, "pipe.png")
+  spawnSync("mkfifo", [fifo])
+  const t0 = Date.now()
+  assert.match(run(["playlist", "art", "playlist:900", fifo]).err, /not a regular file/)
+  assert.ok(Date.now() - t0 < 10000, "a FIFO is refused without waiting")
+  // A picture of ours, also through a linked folder, is fine.
+  const mine = path.join(tmp, "mine")
+  fs.mkdirSync(mine, { recursive: true })
+  fs.writeFileSync(path.join(mine, "y.png"), png)
+  fs.symlinkSync(mine, path.join(tmp, "mine-link"))
+  assert.equal(run(["playlist", "art", "playlist:900", path.join(tmp, "mine-link", "y.png")]).code, 0)
+})
+
 test("artwork must be a regular file, read through one open", function() {
   const png = path.join(tmp, "real.png")
   fs.writeFileSync(png, Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), Buffer.alloc(40)]))

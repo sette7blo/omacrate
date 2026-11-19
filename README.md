@@ -21,6 +21,7 @@ Omacrate is not made by or affiliated with Plex.
   never installs packages itself; if one is missing, `install.sh` names it.
 - Optional: `mpv-mpris`, so the media keys and Omarchy's own media controls
   work with it
+- Setting playlist artwork uses `python3`, which Omarchy already has
 
 ## Install
 
@@ -310,7 +311,13 @@ The key is read from the prompt or from stdin, never from the command line.
   or artwork change, belong to the session, server and user they were read
   on: anything else is refused, and a change of any of them clears the lists.
 - A picked picture is opened once; it must be a regular file, and that one
-  open is what is checked, copied and sent.
+  open is what is checked, copied and sent. A picture in a folder another
+  account can change (a shared folder anyone can write to), or one another
+  account can change itself, is refused, since the path could name a
+  different file by the time it is read: copy it into one of your own
+  folders first.
+- A server lookup after the saved address stops answering finds the same
+  server again by its id, never another one with the same name.
 - The Lidarr API key goes only to the address you enter, without following
   redirects. Plain http to another computer needs your explicit yes first;
   prefer an https address if Lidarr has one.
