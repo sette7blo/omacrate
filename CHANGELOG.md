@@ -6,6 +6,22 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- Every login, Plex Home user switch and switch to another server starts a new session in
+  the credentials file; logout removes it. A server lookup (also the automatic one when
+  the saved address stops answering) saves its result only if the session is still the
+  one it started in, checked under the lock, so a lookup overtaken by a logout, login or
+  user switch saves nothing, and the request that started it is not retried in another
+  session.
+- The panel's connection id is now session, server and user, so two accounts on the same
+  shared server never share it. Every list the panel reads carries it (`--connection`,
+  now a global option before the command), an answer that arrives after a change is
+  dropped, a delete or artwork change uses the connection of the list it was picked from,
+  and any change of session, server or user clears the cached lists and pending actions.
+- Playlist artwork is opened once: the regular-file check and the bounded read happen on
+  that one open file, in one process with a time limit, so a file or link swapped in
+  between is never read.
+
 ## [v0.2.5] - 2026-11-18
 
 ### Security
