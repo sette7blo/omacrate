@@ -6,6 +6,21 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- A login saved before sessions existed is given a session, under the lock, before any
+  server lookup starts, and a lookup never saves when it has no session to check against.
+  A lookup that began on such a login can no longer write the old server back after a
+  logout. The panel's lists keep working through this one-time change.
+- An automatic retry after the saved address stops answering, and a Plex Home user switch,
+  look the server up by its machine id instead of its name, and save only if the session
+  and the server are both unchanged, so they never move to another server that has the
+  same name.
+- Playlist artwork is read by `lib/read_picture.py`. It walks the picked file's real path
+  without following links, and refuses a file in a folder another account can change
+  (unless the folder is sticky, like `/tmp`, and the file is yours or root's), or a file
+  another account can change, since the path could name a different picture by then. The
+  regular-file check and the bounded read are made on that one open file.
+
 ## [v0.2.6] - 2026-11-19
 
 ### Security

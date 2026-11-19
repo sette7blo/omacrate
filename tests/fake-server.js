@@ -46,6 +46,8 @@ const lidarrArtists = [
 const log = []
 let identityDown = false
 let identityDelay = 0
+// A second server with the same name, listed first, when twin is on.
+let twin = false
 let pinPolls = 0
 
 function wav(seconds) {
@@ -88,7 +90,9 @@ function route(req, url, body) {
     if (req.headers["x-plex-token"] === "guest-token-1") return []
     if (req.headers["x-plex-token"] !== ACCOUNT_TOKEN && req.headers["x-plex-token"] !== KID_TOKEN) return 401
     const self = "http://127.0.0.1:" + server.address().port
-    return [
+    const other = twin ? [{ name: "Crate", provides: "server", owned: false, accessToken: OTHER_SERVER_TOKEN, clientIdentifier: "machine-2",
+      connections: [{ uri: self, local: false, relay: false }] }] : []
+    return other.concat([
       { name: "Phone", provides: "client,player", connections: [] },
       { name: "Crate", provides: "server", owned: true, accessToken: SERVER_TOKEN, clientIdentifier: "machine-1",
         connections: [
@@ -98,7 +102,7 @@ function route(req, url, body) {
           { uri: "http://192.0.2.1:1", local: true, relay: false },
           { uri: self, local: false, relay: false }
         ] }
-    ]
+    ])
   }
 
   if (p.indexOf("/api/v1/") === 0) {
@@ -185,6 +189,10 @@ const server = http.createServer(function(req, res) {
       return res.end("ok")
     }
     // POST /__identity-delay with milliseconds slows every address check.
+    if (url.pathname === "/__twin") {
+      twin = body.trim() === "on"
+      return res.end("ok")
+    }
     if (url.pathname === "/__identity-delay") {
       identityDelay = Number(body.trim()) || 0
       return res.end("ok")
