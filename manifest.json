@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.sette7blo.omacrate",
   "name": "Omacrate for Plex",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "author": "sette7blo",
   "license": "MIT",
   "description": "Plays your Plex music library from the bar: one search box, one list, one headless mpv. No visualiser, no polling, nothing running while idle.",

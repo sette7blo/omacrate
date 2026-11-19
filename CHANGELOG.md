@@ -6,6 +6,8 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.2.6] - 2026-11-19
+
 ### Security
 - Every login, Plex Home user switch and switch to another server starts a new session in
   the credentials file; logout removes it. A server lookup (also the automatic one when
@@ -147,7 +149,8 @@ project uses [Semantic Versioning](https://semver.org/).
   launcher, which switches them off, and tells it that library and Lidarr text is data,
   never instructions. Supported agents: claude, codex, cursor-agent, copilot.
 
-[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.2.5...HEAD
+[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.2.6...HEAD
+[v0.2.6]: https://github.com/sette7blo/omacrate/compare/v0.2.5...v0.2.6
 [v0.2.5]: https://github.com/sette7blo/omacrate/compare/v0.2.4...v0.2.5
 [v0.2.4]: https://github.com/sette7blo/omacrate/compare/v0.2.3...v0.2.4
 [v0.2.3]: https://github.com/sette7blo/omacrate/compare/v0.2.2...v0.2.3
