@@ -25,16 +25,18 @@ test("the link state never carries a token", function() {
     lidarr: { baseUrl: "http://x", apiKey: "abcdef0123456789abcdef0123456789" }
   })
   const info = M.linkInfo(raw)
-  assert.deepEqual(info, { linked: true, connection: "none/account", server: "Crate", user: "", home: false, libraries: ["Music"], lidarr: true })
+  assert.deepEqual(info, { linked: true, connection: "none/none/account", server: "Crate", user: "", home: false, libraries: ["Music"], lidarr: true })
   assert.doesNotMatch(JSON.stringify(info), /secret|abcdef|10\.0\.0\.2/)
   assert.equal(M.linkSummary(info), "Crate")
 })
 
-test("the connection names the server and Plex Home user, never anything else", function() {
+test("the connection names the session, server and Plex Home user, never anything else", function() {
   const raw = function(plex) { return JSON.stringify({ plex: Object.assign({ serverUri: "https://a", serverToken: "t" }, plex) }) }
-  assert.equal(M.linkInfo(raw({ machineId: "machine-1" })).connection, "machine-1/account")
-  assert.equal(M.linkInfo(raw({ machineId: "machine-1", userUuid: "bbbbbbbbbbbbbbbb" })).connection, "machine-1/bbbbbbbbbbbbbbbb")
-  assert.equal(M.linkInfo(raw({ machineId: "a/b", userUuid: "x y" })).connection, "none/account")
+  assert.equal(M.linkInfo(raw({ machineId: "machine-1" })).connection, "none/machine-1/account")
+  assert.equal(M.linkInfo(raw({ machineId: "machine-1", userUuid: "bbbbbbbbbbbbbbbb" })).connection, "none/machine-1/bbbbbbbbbbbbbbbb")
+  assert.equal(M.linkInfo(raw({ session: "0a1b2c3d4e5f6071", machineId: "machine-1" })).connection, "0a1b2c3d4e5f6071/machine-1/account")
+  assert.equal(M.linkInfo(raw({ session: "x/y", machineId: "a/b", userUuid: "x y" })).connection, "none/none/account")
+  assert.equal(M.linkInfo(raw({ session: "s1" })).connection, "s1/none/account", "never the token or the address")
 })
 
 test("a missing or broken credentials file reads as not linked", function() {

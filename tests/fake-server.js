@@ -45,6 +45,7 @@ const lidarrArtists = [
 
 const log = []
 let identityDown = false
+let identityDelay = 0
 let pinPolls = 0
 
 function wav(seconds) {
@@ -182,6 +183,15 @@ const server = http.createServer(function(req, res) {
     if (url.pathname === "/__identity") {
       identityDown = body.trim() === "down"
       return res.end("ok")
+    }
+    // POST /__identity-delay with milliseconds slows every address check.
+    if (url.pathname === "/__identity-delay") {
+      identityDelay = Number(body.trim()) || 0
+      return res.end("ok")
+    }
+    if (url.pathname === "/identity" && identityDelay > 0 && !req.delayed) {
+      req.delayed = true
+      return setTimeout(function() { req.emit("end") }, identityDelay)
     }
     log.push({
       method: req.method, host: req.headers.host || "", path: url.pathname, query: url.search, body: body,

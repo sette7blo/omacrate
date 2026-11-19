@@ -45,6 +45,8 @@ test.after(function() {
   fs.rmSync(tmp, { recursive: true, force: true })
 })
 
+const plexCred = function() { return JSON.parse(fs.readFileSync(credPath(), "utf8")).plex || {} }
+const connOf = function(p) { return (p.session || "none") + "/" + (p.machineId || "none") + "/" + (p.userUuid || "account") }
 const credPath = function() { return path.join(env.XDG_STATE_HOME, "omarchy", "omacrate", "credentials.json") }
 
 test("commands that need Plex say so before login", function() {
@@ -131,13 +133,20 @@ test("a playlist gets artwork from a JPEG or PNG, and can be deleted", async fun
 
   // An action asked for on another server or user is refused, and nothing is sent.
   const before = (await requests()).length
-  assert.match(run(["playlist", "art", "--connection", "machine-2/account", "playlist:901", png]).err, /server or user changed/)
-  assert.match(run(["playlist", "delete", "--connection", "machine-1/bbbbbbbbbbbbbbbb", "playlist:901"]).err, /server or user changed/)
-  assert.notEqual(run(["playlist", "delete", "--connection", "../x", "playlist:901"]).code, 0)
+  const here = connOf(plexCred())
+  const session = here.split("/")[0]
+  assert.match(session, /^[0-9a-f]{16}$/, "a login starts a session")
+  assert.match(run(["--connection", session + "/machine-2/account", "playlist", "art", "playlist:901", png]).err, /account, server or user changed/)
+  assert.match(run(["--connection", session + "/machine-1/bbbbbbbbbbbbbbbb", "playlist", "delete", "playlist:901"]).err, /account, server or user changed/)
+  // Same server and user, another session (another login, another account).
+  assert.match(run(["--connection", "0000000000000000/machine-1/account", "playlist", "delete", "playlist:901"]).err, /account, server or user changed/)
+  assert.notEqual(run(["--connection", "../x", "playlist", "delete", "playlist:901"]).code, 0)
+  // A list read on another connection is refused before anything is asked.
+  assert.match(run(["--json", "--connection", "0000000000000000/machine-1/account", "playlists"]).err, /account, server or user changed/)
   assert.equal((await requests()).slice(before).filter(function(r) { return r.method !== "GET" }).length, 0)
 
   assert.notEqual(run(["playlist", "delete", "901"]).code, 0)
-  assert.deepEqual(json(["playlist", "delete", "--connection", "machine-1/account", "playlist:901"]), { key: "playlist:901", deleted: true })
+  assert.deepEqual(JSON.parse(ok(["--json", "--connection", here, "playlist", "delete", "playlist:901"])), { key: "playlist:901", deleted: true })
   assert.equal(json(["playlists"]).some(function(p) { return p.key === "playlist:901" }), false)
   assert.notEqual(run(["playlist", "delete", "playlist:901"]).code, 0)
 })
@@ -164,6 +173,87 @@ test("a server switch saves nothing until an address answers with that server's 
   assert.equal(now.plex.serverToken, "srv-token-1")
   assert.equal(now.plex.serverUri, base)
   fs.writeFileSync(credPath(), saved, { mode: 0o600 })
+})
+
+test("the session changes with a user switch, not with the same server or a new address", function() {
+  const s0 = plexCred().session
+  assert.match(s0, /^[0-9a-f]{16}$/)
+  ok(["server", "Crate"])
+  assert.equal(plexCred().session, s0, "choosing the same server again keeps the session")
+  // The saved address stops answering: the lookup finds it again, same session.
+  const cred = JSON.parse(fs.readFileSync(credPath(), "utf8"))
+  cred.plex.serverUri = "http://127.0.0.1:1"
+  fs.writeFileSync(credPath(), JSON.stringify(cred), { mode: 0o600 })
+  assert.equal(json(["artists"]).length, 2)
+  assert.equal(plexCred().serverUri, base)
+  assert.equal(plexCred().session, s0, "a new address for the same server keeps the session")
+  ok(["user", "kid"])
+  const s1 = plexCred().session
+  assert.notEqual(s1, s0)
+  ok(["user", "papa"])
+  assert.notEqual(plexCred().session, s1)
+})
+
+test("credentials saved before sessions existed still work, also for delete and artwork", function() {
+  const saved = fs.readFileSync(credPath(), "utf8")
+  const cred = JSON.parse(saved)
+  delete cred.plex.session
+  fs.writeFileSync(credPath(), JSON.stringify(cred), { mode: 0o600 })
+  const legacy = connOf(plexCred())
+  assert.equal(legacy.split("/")[0], "none")
+  assert.ok(Array.isArray(JSON.parse(ok(["--json", "--connection", legacy, "playlists"]))))
+  const png = path.join(tmp, "legacy.png")
+  fs.writeFileSync(png, Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), Buffer.alloc(50)]))
+  assert.match(run(["--connection", legacy, "playlist", "art", "playlist:900", png]).err, /^$|refused/)
+  fs.writeFileSync(credPath(), saved, { mode: 0o600 })
+})
+
+async function overtaken(change) {
+  const cred = JSON.parse(fs.readFileSync(credPath(), "utf8"))
+  cred.plex.serverUri = "http://127.0.0.1:1"
+  fs.writeFileSync(credPath(), JSON.stringify(cred), { mode: 0o600 })
+  await fetch(base + "/__identity-delay", { method: "POST", body: "2500" })
+  // A request whose server lookup is still running when the session changes.
+  const slow = spawn(CLI, ["--json", "artists"], { env: env, stdio: ["ignore", "ignore", "pipe"] })
+  let err = ""
+  slow.stderr.on("data", function(d) { err += d })
+  const done = new Promise(function(resolve) { slow.on("exit", resolve) })
+  await sleep(800)
+  await fetch(base + "/__identity-delay", { method: "POST", body: "0" })
+  change()
+  const code = await done
+  return { code: code, err: err }
+}
+
+test("a server lookup overtaken by a logout saves nothing", async function() {
+  const r = await overtaken(function() { ok(["logout"]) })
+  assert.notEqual(r.code, 0)
+  assert.equal(JSON.parse(fs.readFileSync(credPath(), "utf8")).plex, undefined, "still logged out")
+  ok(["login", "--start"])
+  assert.equal(ok(["login", "--wait", "77"]), "linked")
+})
+
+test("a server lookup overtaken by a user switch saves nothing, and its retry does not run", async function() {
+  let after = null
+  const r = await overtaken(function() { ok(["user", "kid"]); after = fs.readFileSync(credPath(), "utf8") })
+  assert.notEqual(r.code, 0)
+  assert.match(r.err, /changed/)
+  assert.equal(fs.readFileSync(credPath(), "utf8"), after, "the switch's own result stands")
+  assert.equal(plexCred().userToken, "kid-token-1")
+  ok(["user", "papa"])
+})
+
+test("artwork must be a regular file, read through one open", function() {
+  const png = path.join(tmp, "real.png")
+  fs.writeFileSync(png, Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), Buffer.alloc(40)]))
+  const link = path.join(tmp, "link.png")
+  fs.symlinkSync(png, link)
+  assert.match(run(["playlist", "art", "playlist:900", link]).err, /^$|refused/)
+  const dev = path.join(tmp, "zero.png")
+  fs.symlinkSync("/dev/zero", dev)
+  assert.match(run(["playlist", "art", "playlist:900", dev]).err, /not a regular file/)
+  assert.match(run(["playlist", "art", "playlist:900", tmp]).err, /not a regular file/)
+  assert.match(run(["playlist", "art", "playlist:900", path.join(tmp, "missing.png")]).err, /cannot read/)
 })
 
 test("tokens travel in headers, never in an address", async function() {

@@ -39,7 +39,14 @@ Panel {
   // The Plex server and user. A delete or artwork change is bound to the one
   // it was asked for on; the CLI refuses it on any other.
   readonly property string connection: service ? service.link.connection : ""
-  onConnectionChanged: root.pendingDelete = null
+  // Another account, user or server: everything shown came from the old one,
+  // so it is dropped, with any action waiting on it, and read again.
+  onConnectionChanged: {
+    root.pendingDelete = null
+    root.pendingRequest = null
+    root.forget()
+    if (root.linked) root.ensureTab()
+  }
   readonly property bool home: service ? service.link.home === true : false
   readonly property bool djOn: service ? service.options.dj === true && service.agentReady === true : false
 
@@ -96,9 +103,12 @@ Panel {
   // The open playlist, or else the selected playlist row.
   readonly property var playlistTarget: {
     if (!linked) return null
-    if (view && view.within === "playlist" && Model.isKey(view.key)) return { key: view.key, title: view.title, connection: root.connection }
+    // The connection the shown list was read from, not the current one.
+    var from = view && view.connection ? view.connection : ""
+    if (!from) return null
+    if (view.within === "playlist" && Model.isKey(view.key)) return { key: view.key, title: view.title, connection: from }
     var row = rows[cursor]
-    if (row && row.kind === "playlist" && Model.isKey(row.key)) return { key: row.key, title: row.title, connection: root.connection }
+    if (row && row.kind === "playlist" && Model.isKey(row.key)) return { key: row.key, title: row.title, connection: from }
     return null
   }
 
@@ -113,7 +123,7 @@ Panel {
     var target = root.pendingDelete
     root.pendingDelete = null
     if (!target) return
-    act(["playlist", "delete", "--connection", target.connection, target.key], function() {
+    act(["--connection", target.connection, "playlist", "delete", target.key], function() {
       if (root.view && root.view.within === "playlist" && root.view.key === target.key) root.back()
       var views = ({})
       for (var k in root.tabViews) if (k !== "playlists") views[k] = root.tabViews[k]
@@ -155,7 +165,7 @@ Panel {
         Util.execArgv(["notify-send", "-a", "Omacrate", "-u", "critical", "Playlist artwork not set", "That file name cannot be used. Rename the file and pick it again."])
         return
       }
-      act(["playlist", "art", "--connection", target.connection, target.key, file], function() {
+      act(["--connection", target.connection, "playlist", "art", target.key, file], function() {
         Util.execArgv(["notify-send", "-a", "Omacrate", "Playlist artwork set", "Plex shows the new picture for this playlist."])
       }, function(error) {
         Util.execArgv(["notify-send", "-a", "Omacrate", "-u", "critical", "Playlist artwork not set", error])
@@ -228,18 +238,29 @@ Panel {
   // replaces whatever was waiting, so fast typing costs one search, not ten.
   function load(request) {
     if (!root.cli) return
+    request.connection = root.connection
     root.message = ""
     root.loading = true
     if (listProc.running) {
+      // The same request on the same connection is already on its way.
+      var running = listProc.request
+      if (running && running.target === request.target && running.connection === request.connection
+          && JSON.stringify(running.args) === JSON.stringify(request.args)) {
+        root.pendingRequest = null
+        return
+      }
       root.pendingRequest = request
       return
     }
     launch(request)
   }
 
+  // Each request carries the connection it was asked on; the CLI refuses it
+  // on any other, and an answer that arrives after a change is dropped.
   function launch(request) {
+    if (!request.connection) request.connection = root.connection
     listProc.request = request
-    listProc.command = [root.cli, "--json"].concat(request.args)
+    listProc.command = [root.cli, "--json", "--connection", request.connection].concat(request.args)
     listProc.running = true
   }
 
@@ -298,12 +319,14 @@ Panel {
       }
       root.loading = false
       if (!request) return
+      if (request.connection !== root.connection) return
       if (code !== 0) {
         root.message = Model.errorText(listErr.text) || "The Plex server did not answer."
         return
       }
       var made = {
         title: request.title, within: request.within, key: request.key, cursor: 0, at: Date.now(),
+        connection: request.connection,
         rows: request.within === "users" ? Model.userRows(listOut.text)
           : Model.rows(Model.items(listOut.text), request.within)
       }
