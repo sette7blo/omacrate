@@ -303,10 +303,14 @@ The key is read from the prompt or from stdin, never from the command line.
   (`~/.curlrc`), refuses redirects and checks certificates, so the token and
   the Lidarr key stay with the address they were meant for.
 - Each request to Plex or Lidarr uses one read of the saved connection: the
-  address, and the token or key that belongs to it. Changing server or Plex
-  Home user saves nothing until the new server has answered with its own
-  token. A playlist delete or artwork change only acts on the server and user
-  it was asked for on.
+  address, and the token or key that belongs to it. Every login, Plex Home
+  user switch and switch to another server starts a new session; a server
+  lookup saves its result only in the session it started in, so a logout or
+  switch made meanwhile always wins. The panel's lists, and a playlist delete
+  or artwork change, belong to the session, server and user they were read
+  on: anything else is refused, and a change of any of them clears the lists.
+- A picked picture is opened once; it must be a regular file, and that one
+  open is what is checked, copied and sent.
 - The Lidarr API key goes only to the address you enter, without following
   redirects. Plain http to another computer needs your explicit yes first;
   prefer an https address if Lidarr has one.

@@ -47,34 +47,41 @@ cred_update() {
   exec {lock}>"$STATE_DIR/.credentials.lock"
   flock "$lock"
   tmp="$(mktemp -p "$STATE_DIR" .tmp.XXXXXX)"
-  if jq "$1" "$CRED" > "$tmp"; then
+  if jq "$1" "$CRED" > "$tmp" 2>/dev/null; then
     chmod 600 "$tmp"
     mv -f "$tmp" "$CRED"
   else
     rm -f "$tmp"
-    die "could not update $CRED"
+    die "${2:-could not update $CRED}"
   fi
   exec {lock}>&-
 }
 
-# One read of the Plex connection: the server address, its token, the server
-# and the Plex Home user, all from the same version of the file. A request
-# uses one such snapshot, so it never pairs one server's address with another
-# server's token. CONN_ID names the server and user, for actions that must
-# stay on the connection they were started on.
+# A new session id: written by every login, Plex Home user switch and switch
+# to another server, removed by logout. It names one authenticated session, so
+# two accounts never share it even on the same shared server.
+new_session() { head -c 8 /dev/urandom | od -An -tx1 | tr -d ' \n'; }
+
+# One read of the Plex connection: the server address, its token, the server,
+# the Plex Home user and the session, all from the same version of the file.
+# A request uses one such snapshot, so it never pairs one server's address
+# with another server's token. CONN_ID (session/server/user) names the
+# connection, for requests and actions that must stay on the one they were
+# started on.
 conn_read() {
   local line=""
   [[ -r "$CRED" ]] && line="$(jq -r '[.plex.serverUri // "", .plex.serverToken // "", .plex.machineId // "",
-    (.plex.userUuid // "account"), .plex.serverName // ""] | @tsv' "$CRED" 2>/dev/null)" || true
-  IFS=$'\t' read -r CONN_URI CONN_TOKEN CONN_MACHINE CONN_USER CONN_NAME <<<"$line" || true
-  CONN_ID="${CONN_MACHINE:-none}/${CONN_USER:-account}"
+    (.plex.userUuid // "account"), .plex.serverName // "", .plex.session // ""] | @tsv' "$CRED" 2>/dev/null)" || true
+  IFS=$'\t' read -r CONN_URI CONN_TOKEN CONN_MACHINE CONN_USER CONN_NAME CONN_SESSION <<<"$line" || true
+  CONN_ID="${CONN_SESSION:-none}/${CONN_MACHINE:-none}/${CONN_USER:-account}"
 }
 
 # Set by --connection: the request is refused if the connection changed.
 EXPECT_CONN=""
+CONN_PATTERN='^[A-Za-z0-9._-]{1,80}/[A-Za-z0-9._-]{1,80}/[A-Za-z0-9._-]{1,80}$'
 conn_check() {
   [[ -z "$EXPECT_CONN" || "$EXPECT_CONN" == "$CONN_ID" ]] \
-    || die "the Plex server or user changed since this was asked for; nothing was done"
+    || die "the Plex account, server or user changed since this was asked for; nothing was done"
 }
 
 client_id() {
@@ -137,8 +144,13 @@ plex() {
   plex_at "$CONN_URI" "$1" "$2" 30 "$CONN_TOKEN" 2>/dev/null && return 0 || rc=$?
   case "$rc" in
     6|7|28|35|60)
-      ( resolve_server "$CONN_NAME" ) >/dev/null 2>&1 || die "the Plex server does not answer"
+      # The lookup saves only if the session is still this request's, and
+      # the retry runs only in that same session.
+      local session="$CONN_SESSION" found=0
+      ( RESOLVE_EXPECT="$session" resolve_server "$CONN_NAME" ) >/dev/null 2>&1 || found=$?
       conn_read
+      [[ "$CONN_SESSION" == "$session" ]] || die "the Plex account, server or user changed during this request; nothing was done"
+      (( found == 0 )) || die "the Plex server does not answer"
       conn_check
       plex_at "$CONN_URI" "$1" "$2" 30 "$CONN_TOKEN" ;;
     22) die "the Plex server refused the request ($1 ${2%%\?*})" ;;
@@ -151,11 +163,20 @@ plex() {
 # only https addresses are used; plain http only on this computer.
 # Nothing is saved until an address of the chosen server has answered with
 # that server's own token; then server, token, address and libraries are
-# saved in one write. RESOLVE_TOKEN (a Plex Home user's token) and
-# RESOLVE_EXTRA (a jq filter) let a user switch land in that same write.
+# saved in one write, and only if the session is still the one this lookup
+# started in (checked under the lock): a lookup that was overtaken by a login,
+# logout or user switch saves nothing. RESOLVE_EXPECT names that session when
+# the caller read it earlier; RESOLVE_TOKEN (a Plex Home user's token) and
+# RESOLVE_EXTRA (a jq filter) let a user switch land in the same write.
+# RESOLVE_SESSION=new starts a new session when the server, its token or the
+# user changes; RESOLVE_SESSION=always starts one in any case.
 resolve_server() {
-  local want="${1:-}" token resources server name stoken machine
-  token="${RESOLVE_TOKEN:-$(active_token)}"
+  local want="${1:-}" token resources server name stoken machine line session
+  line=""
+  [[ -r "$CRED" ]] && line="$(jq -r '[.plex.userToken // .plex.token // "", .plex.session // ""] | @tsv' "$CRED" 2>/dev/null)" || true
+  IFS=$'\t' read -r token session <<<"$line" || true
+  session="${RESOLVE_EXPECT-$session}"
+  token="${RESOLVE_TOKEN:-$token}"
   [[ -n "$token" ]] || die "not linked to Plex. Run: omacrate login"
   resources="$(plextv GET '/resources?includeHttps=1&includeRelay=1' "$token")" \
     || die "could not read the server list from plex.tv"
@@ -180,8 +201,14 @@ resolve_server() {
   sections="$(plex_at "$found" GET /library/sections 30 "$stoken" \
     | jq -c '[.MediaContainer.Directory // [] | .[] | select(.type == "artist") | {id: (.key | tostring), title: (.title // "")}]')"
   NAME="$name" SERVER_TOKEN="$stoken" MACHINE="$machine" ADDRESS="$found" SECTIONS="$sections" \
-    cred_update '.plex.serverName = env.NAME | .plex.serverToken = env.SERVER_TOKEN | .plex.machineId = env.MACHINE
-      | .plex.serverUri = env.ADDRESS | .plex.sections = (env.SECTIONS | fromjson) | '"${RESOLVE_EXTRA:-.}"
+    EXPECT="$session" FRESH="$(new_session)" MODE="${RESOLVE_SESSION:-keep}" \
+    cred_update 'if (.plex.session // "") != env.EXPECT then error("session changed") else
+      ((.plex.machineId // "") != env.MACHINE or (.plex.serverToken // "") != env.SERVER_TOKEN) as $moved
+      | .plex.serverName = env.NAME | .plex.serverToken = env.SERVER_TOKEN | .plex.machineId = env.MACHINE
+      | .plex.serverUri = env.ADDRESS | .plex.sections = (env.SECTIONS | fromjson)
+      | (if env.MODE == "always" or (env.MODE == "new" and $moved) then .plex.session = env.FRESH else . end)
+      | '"${RESOLVE_EXTRA:-.}"' end' \
+    "the Plex account, server or user changed while the server was being looked up; nothing was saved"
   printf '%s\n' "$name"
 }
 
@@ -338,7 +365,7 @@ cmd_playlist() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --connection)
-        [[ "${2:-}" =~ ^[A-Za-z0-9._-]{1,80}/[A-Za-z0-9._-]{1,80}$ ]] || die "--connection takes <server>/<user>"
+        [[ "${2:-}" =~ $CONN_PATTERN ]] || die "--connection takes <session>/<server>/<user>"
         EXPECT_CONN="$2"; shift 2 ;;
       *) args+=("$1"); shift ;;
     esac
@@ -387,13 +414,22 @@ cmd_playlist() {
     art)
       local target="${1:-}" file="${2:-}" mime size
       is_playlist "$target" && [[ -n "$file" ]] || die "usage: omacrate playlist art <playlist key> <image file>"
-      [[ -f "$file" && -r "$file" ]] || die "cannot read $file"
-      # The file is read once, into a private folder, and the type check and
-      # the upload both use that copy: a file swapped in the picked folder
-      # afterwards is never sent. Reading stops just past the size limit.
+      # The file is opened once. The regular-file check and the bounded read
+      # are made on that one open handle, in one process with a time limit
+      # (a FIFO would wait for a writer), into a private folder; the type
+      # check and the upload use that copy. A file or link swapped in the
+      # picked folder at any point is never read or sent.
       ART_DIR="$(mktemp -d)"
       trap 'rm -rf -- "$ART_DIR"' EXIT
-      timeout 20 head -c 10485761 -- "$file" > "$ART_DIR/picked" 2>/dev/null || die "cannot read $file"
+      local rc=0
+      timeout 20 bash -c 'exec 3<"$1" || exit 2; [[ -f /dev/fd/3 ]] || exit 3; head -c 10485761 <&3' _ "$file" \
+        > "$ART_DIR/picked" 2>/dev/null || rc=$?
+      case "$rc" in
+        0) ;;
+        3) die "$file is not a regular file" ;;
+        124) die "reading $file took too long" ;;
+        *) die "cannot read $file" ;;
+      esac
       size="$(stat -c %s -- "$ART_DIR/picked")"
       (( size > 0 && size <= 10485760 )) || die "the picture must be 10 MB or smaller"
       if [[ "$file" == *.svg ]] && head -c 2048 -- "$ART_DIR/picked" | grep -q '<svg'; then
@@ -436,8 +472,10 @@ pin_wait() {
   done
   [[ -n "$token" ]] || die "nobody entered the code in time. Start again."
   drop_player
-  TOKEN="$token" cred_update '.plex = {token: env.TOKEN}'
-  resolve_server ""
+  local session
+  session="$(new_session)"
+  TOKEN="$token" SESSION="$session" cred_update '.plex = {token: env.TOKEN, session: env.SESSION}'
+  RESOLVE_EXPECT="$session" resolve_server ""
   remember_home "$(home_users 2>/dev/null || echo '[]')"
 }
 
@@ -485,7 +523,7 @@ cmd_server() {
   else
     local before name
     before="$(server_pair)"
-    name="$(resolve_server "$*")"
+    name="$(RESOLVE_SESSION=new resolve_server "$*")"
     [[ "$(server_pair)" == "$before" ]] || drop_player
     printf 'Using %s.\n' "$name"
   fi
@@ -516,6 +554,10 @@ remember_home() {
 
 cmd_user() {
   require_link
+  # The session this switch starts from: if it changes meanwhile (a login,
+  # logout or another switch), the switch saves nothing.
+  conn_read
+  local start_session="$CONN_SESSION" start_name="$CONN_NAME"
   local users
   users="$(home_users 2>/dev/null)" || die "could not read the users of this Plex Home"
   remember_home "$users"
@@ -552,12 +594,12 @@ cmd_user() {
   fi
   # The user and the server token they get are saved together, and only once
   # the server has answered with that token.
-  conn_read
   if ! ( USER_TOKEN="$token" UUID="$uuid" TITLE="$title" RESOLVE_TOKEN="${token:-$(cred .plex.token)}" \
+    RESOLVE_EXPECT="$start_session" RESOLVE_SESSION=always \
     RESOLVE_EXTRA='(if env.USER_TOKEN == "" then del(.plex.userToken, .plex.userUuid)
       else .plex.userToken = env.USER_TOKEN | .plex.userUuid = env.UUID end) | .plex.user = env.TITLE' \
-    resolve_server "$CONN_NAME" ) >/dev/null 2>&1; then
-    die "$title has no access to the server $CONN_NAME. Nothing changed."
+    resolve_server "$start_name" ) >/dev/null 2>&1; then
+    die "$title has no access to the server $start_name, or the account changed meanwhile. Nothing changed."
   fi
   # The queued tracks carry the previous user's token, and the queue was theirs.
   drop_player
@@ -1069,7 +1111,18 @@ Files: $STATE_DIR
 EOF
 }
 
-if [[ "${1:-}" == --json ]]; then JSON=true; shift; fi
+# --json and --connection <session>/<server>/<user> may come in any order
+# before the command. The panel passes the connection it read with every
+# request, so an answer always comes from the connection it asked about.
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --json) JSON=true; shift ;;
+    --connection)
+      [[ "${2:-}" =~ $CONN_PATTERN ]] || { echo "omacrate: --connection takes <session>/<server>/<user>" >&2; exit 2; }
+      EXPECT_CONN="$2"; shift 2 ;;
+    *) break ;;
+  esac
+done
 need jq
 need curl
 
