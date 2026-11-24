@@ -108,8 +108,6 @@ arrow above the list.
 | `-` `+` | Volume down and up |
 | `m` | Mute or unmute |
 | `/` | Back to the search box |
-| `i` | Set artwork for the selected or open playlist (opens a file chooser) |
-| `x` | Delete the selected or open playlist, after a yes |
 | `u` | Switch user (Plex Home) |
 | `d` | Ask the DJ |
 | `Esc` | Back, then close |
@@ -308,8 +306,9 @@ The key is read from the prompt or from stdin, never from the command line.
   user switch and switch to another server starts a new session; a server
   lookup saves its result only in the session it started in, so a logout or
   switch made meanwhile always wins. The panel's lists, and a playlist delete
-  or artwork change, belong to the session, server and user they were read
-  on: anything else is refused, and a change of any of them clears the lists.
+  or artwork change given `--connection`, belong to the session, server and
+  user they were read on: anything else is refused, and a change of any of
+  them clears the lists.
 - A picked picture is opened once; it must be a regular file, and that one
   open is what is checked, copied and sent. A picture in a folder another
   account can change (a shared folder anyone can write to), or one another

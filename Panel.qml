@@ -36,13 +36,11 @@ Panel {
   readonly property var current: service ? service.current : null
   readonly property string loginState: service ? service.loginState : ""
   readonly property string user: service ? service.link.user : ""
-  // The Plex server and user. A delete or artwork change is bound to the one
-  // it was asked for on; the CLI refuses it on any other.
+  // The Plex server and user the shown lists were read from.
   readonly property string connection: service ? service.link.connection : ""
   // Another account, user or server: everything shown came from the old one,
   // so it is dropped, with any action waiting on it, and read again.
   onConnectionChanged: {
-    root.pendingDelete = null
     root.pendingRequest = null
     root.forget()
     if (root.linked) root.ensureTab()
@@ -64,10 +62,6 @@ Panel {
   property int cursor: 0
   property bool loading: false
   property string message: ""
-  // A line that is not an error, such as "Deleted". An error replaces it.
-  property string notice: ""
-  // The playlist waiting for a yes before it is deleted: {key, title}.
-  property var pendingDelete: null
   property var pendingRequest: null
 
   readonly property int staleSeconds: 300
@@ -97,82 +91,6 @@ Panel {
     return "Nothing here."
   }
 
-  onMessageChanged: if (root.message !== "") root.notice = ""
-
-  // --- Playlist delete and artwork ---------------------------------------
-  // The open playlist, or else the selected playlist row.
-  readonly property var playlistTarget: {
-    if (!linked) return null
-    // The connection the shown list was read from, not the current one.
-    var from = view && view.connection ? view.connection : ""
-    if (!from) return null
-    if (view.within === "playlist" && Model.isKey(view.key)) return { key: view.key, title: view.title, connection: from }
-    var row = rows[cursor]
-    if (row && row.kind === "playlist" && Model.isKey(row.key)) return { key: row.key, title: row.title, connection: from }
-    return null
-  }
-
-  function askDelete() {
-    if (!root.playlistTarget) return
-    root.message = ""
-    root.notice = ""
-    root.pendingDelete = root.playlistTarget
-  }
-
-  function confirmDelete() {
-    var target = root.pendingDelete
-    root.pendingDelete = null
-    if (!target) return
-    act(["--connection", target.connection, "playlist", "delete", target.key], function() {
-      if (root.view && root.view.within === "playlist" && root.view.key === target.key) root.back()
-      var views = ({})
-      for (var k in root.tabViews) if (k !== "playlists") views[k] = root.tabViews[k]
-      root.tabViews = views
-      root.ensureTab()
-      root.notice = "Deleted the playlist " + Model.text(target.title, 80) + "."
-    })
-  }
-
-  // The desktop file chooser opens in a window of its own, under which the
-  // panel would sit, so the panel closes first and the result comes back as
-  // a notification.
-  function pickArtwork() {
-    var target = root.playlistTarget
-    if (!target || pickProc.running) return
-    root.pendingDelete = null
-    pickProc.target = target
-    pickProc.command = [root.omarchyBin + "/omarchy-file-select", "--title", "Playlist artwork", "--extensions", "jpg jpeg png"]
-    pickProc.running = true
-    close()
-  }
-
-  readonly property string omarchyBin: (Quickshell.env("OMARCHY_PATH") || "/usr/share/omarchy") + "/bin"
-
-  Process {
-    id: pickProc
-    property var target: null
-    running: false
-    stdout: StdioCollector { id: pickOut; waitForEnd: true }
-    onExited: function(code) {
-      var target = pickProc.target
-      pickProc.target = null
-      // One path, ended by one newline. A name that itself holds a newline
-      // could stand for another file, so it is refused rather than cut.
-      var out = String(pickOut.text || "")
-      var file = out.slice(-1) === "\n" ? out.slice(0, -1) : out
-      if (code !== 0 || !target) return
-      if (file.indexOf("/") !== 0 || file.indexOf("\n") !== -1 || file.indexOf("\r") !== -1) {
-        Util.execArgv(["notify-send", "-a", "Omacrate", "-u", "critical", "Playlist artwork not set", "That file name cannot be used. Rename the file and pick it again."])
-        return
-      }
-      act(["--connection", target.connection, "playlist", "art", target.key, file], function() {
-        Util.execArgv(["notify-send", "-a", "Omacrate", "Playlist artwork set", "Plex shows the new picture for this playlist."])
-      }, function(error) {
-        Util.execArgv(["notify-send", "-a", "Omacrate", "-u", "critical", "Playlist artwork not set", error])
-      })
-    }
-  }
-
   function showStacked(next) {
     if (root.view) root.view.cursor = root.cursor
     root.stack = root.stack.concat([next])
@@ -181,8 +99,6 @@ Panel {
 
   function back() {
     root.message = ""
-    root.notice = ""
-    root.pendingDelete = null
     if (root.stack.length) {
       var rest = root.stack.slice(0, root.stack.length - 1)
       root.stack = rest
@@ -195,8 +111,6 @@ Panel {
 
   function selectTab(name) {
     root.message = ""
-    root.notice = ""
-    root.pendingDelete = null
     root.stack = []
     root.tab = name
     root.cursor = name === "queue" && root.service ? Math.max(0, root.service.position) : 0
@@ -431,7 +345,6 @@ Panel {
       if (root.service) root.service.panelOpen = root.opened
       if (!root.opened) {
         root.showSettings = false
-        root.pendingDelete = null
         return
       }
       root.ensureTab()
@@ -473,13 +386,6 @@ Panel {
         var key = event.key
         var letter = event.text
         var svc = root.service
-        if (root.pendingDelete) {
-          // Only a clear yes deletes; anything else but Enter or y cancels.
-          if (key === Qt.Key_Return || key === Qt.Key_Enter || letter === "y") root.confirmDelete()
-          else root.pendingDelete = null
-          event.accepted = true
-          return
-        }
         if (key === Qt.Key_Escape) {
           // Out of the settings or a list first, out of the panel after that.
           if (root.showSettings) root.showSettings = false
@@ -536,10 +442,6 @@ Panel {
           if (svc && svc.playing) svc.nudgeVolume(5)
         } else if (letter === "m") {
           if (svc && svc.playing) svc.toggleMute()
-        } else if (letter === "x") {
-          root.askDelete()
-        } else if (letter === "i") {
-          root.pickArtwork()
         } else if (letter === "d") {
           if (root.djOn) root.askDj()
         } else if (letter === "u") {
@@ -764,25 +666,6 @@ Panel {
             elide: Text.ElideRight
             maximumLineCount: 1
           }
-          PanelActionButton {
-            visible: root.view !== null && root.view.within === "playlist"
-            iconText: "\u{f02e9}"
-            tooltipText: "Set artwork"
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            onClicked: root.pickArtwork()
-          }
-          PanelActionButton {
-            visible: root.view !== null && root.view.within === "playlist"
-            iconText: "\u{f01b4}"
-            tooltipText: "Delete playlist"
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            onClicked: {
-              keys.forceActiveFocus()
-              root.askDelete()
-            }
-          }
           Text {
             textFormat: Text.PlainText
             visible: root.rows.length > 0
@@ -829,54 +712,6 @@ Panel {
           wrapMode: Text.WordWrap
           font.family: root.fontFamily
           font.pixelSize: Style.font.body
-        }
-
-        Column {
-          width: parent.width
-          spacing: Style.spacing.md
-          visible: root.pendingDelete !== null
-
-          Text {
-            textFormat: Text.PlainText
-            width: parent.width
-            text: root.pendingDelete
-              ? "Delete the playlist " + Model.text(root.pendingDelete.title, 80) + " from Plex? This cannot be undone. The tracks stay in your library."
-              : ""
-            color: root.foreground
-            wrapMode: Text.WordWrap
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-          }
-          Row {
-            spacing: Style.spacing.lg
-
-            Button {
-              text: "Delete"
-              bordered: true
-              foreground: Commons.Color.urgent
-              accent: root.accent
-              fontFamily: root.fontFamily
-              onClicked: root.confirmDelete()
-            }
-            Button {
-              text: "Cancel"
-              foreground: root.foreground
-              accent: root.accent
-              fontFamily: root.fontFamily
-              onClicked: root.pendingDelete = null
-            }
-          }
-        }
-
-        Text {
-          textFormat: Text.PlainText
-          width: parent.width
-          visible: text !== ""
-          text: root.notice
-          color: root.dim
-          wrapMode: Text.WordWrap
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.bodySmall
         }
 
         Text {
