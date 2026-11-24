@@ -16,6 +16,10 @@ project uses [Semantic Versioning](https://semver.org/).
 - The DJ terminal opens with its own app-id, `org.omarchy.agent.omacrate`, instead of
   `org.omarchy.agent`.
 
+### Fixed
+- The settings scroll inside the panel, so the AI DJ switches at the bottom are no longer
+  cut off on shorter screens.
+
 ### Removed
 - The panel's playlist artwork and delete buttons, and their `i` and `x` keys. Both stay
   available to the DJ and on the command line (`omacrate playlist art`,
@@ -132,6 +136,10 @@ project uses [Semantic Versioning](https://semver.org/).
   settings or `omacrate lidarr dj on`. While it is off, the DJ is not given the
   add-artist skill or told that Lidarr exists, and `omacrate lidarr` refuses it. The DJ
   can never change the Lidarr settings.
+
+### Fixed
+- The settings scroll inside the panel, so the AI DJ switches at the bottom are no longer
+  cut off on shorter screens.
 
 ### Removed
 - `omacrate lidarr queue`. It showed what is downloading, which nothing needs: Lidarr

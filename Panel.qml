@@ -462,6 +462,7 @@ Panel {
       spacing: Style.spacing.xxl
 
       PanelHero {
+        id: hero
         title: "Omacrate"
         meta: root.heroMeta
         foreground: root.foreground
@@ -500,27 +501,52 @@ Panel {
         }
       }
 
-      PanelSeparator { foreground: root.foreground }
+      PanelSeparator {
+        id: heroSeparator
+        foreground: root.foreground
+      }
 
       // ---- Settings ----
-      Loader {
+      // They scroll inside whatever height the panel has left below the
+      // header, so the DJ switches at the bottom stay reachable.
+      Flickable {
+        id: settingsScroller
         width: parent.width
-        active: root.showSettings
-        visible: active
-        sourceComponent: Component {
-          SettingsView {
-            width: body.width
-            service: root.service
-            foreground: root.foreground
-            accent: root.accent
-            fontFamily: root.fontFamily
-            onSwitchUser: {
-              root.showSettings = false
-              root.showUsers()
-            }
-            onLinkAccount: {
-              root.showSettings = false
-              if (root.service) root.service.startLogin()
+        readonly property real panelCap: Math.min(Style.space(720),
+          panel.availableCardHeight > 0 ? panel.availableCardHeight - panel.verticalContentInset : Style.space(720))
+        height: Math.max(0, Math.min(contentHeight,
+          panelCap - hero.height - heroSeparator.height - body.spacing * 2))
+        visible: root.showSettings
+        contentWidth: width
+        contentHeight: settingsLoader.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.VerticalFlick
+        interactive: contentHeight > height
+        ScrollBar.vertical: ScrollBar {
+          id: settingsScroll
+          policy: ScrollBar.AsNeeded
+        }
+
+        Loader {
+          id: settingsLoader
+          width: settingsScroller.width - (settingsScroller.interactive ? settingsScroll.width + Style.space(6) : 0)
+          active: root.showSettings
+          sourceComponent: Component {
+            SettingsView {
+              width: settingsLoader.width
+              service: root.service
+              foreground: root.foreground
+              accent: root.accent
+              fontFamily: root.fontFamily
+              onSwitchUser: {
+                root.showSettings = false
+                root.showUsers()
+              }
+              onLinkAccount: {
+                root.showSettings = false
+                if (root.service) root.service.startLogin()
+              }
             }
           }
         }
