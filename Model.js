@@ -340,7 +340,6 @@ function hints(row, playing, inList) {
     else if (row.kind === "queued") parts.push("enter jump")
     else if (row.kind === "user") parts.push("enter switch")
     else parts.push("enter open", "p play", "s shuffle", "a queue")
-    if (row.kind === "playlist") parts.push("i artwork", "x delete")
   }
   if (playing) parts.push("space pause", "n b skip", "- + volume")
   parts.push("tab next list", "/ search")

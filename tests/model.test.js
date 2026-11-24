@@ -241,8 +241,7 @@ test("hints follow the selected row", function() {
   assert.match(M.hints({ kind: "album" }, true), /enter open.*p play.*space pause/)
   assert.equal(M.hints(null, false), "tab next list   / search")
   assert.match(M.hints({ kind: "track" }, false, true), /^esc back   enter play/)
-  assert.match(M.hints({ kind: "playlist" }, false), /i artwork   x delete/)
-  assert.doesNotMatch(M.hints({ kind: "album" }, false), /delete/)
+  assert.doesNotMatch(M.hints({ kind: "playlist" }, false), /artwork|delete/)
 })
 
 test("volume moves in steps of five within 0 to 100", function() {

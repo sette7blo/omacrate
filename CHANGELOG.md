@@ -6,6 +6,11 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+- The panel's playlist artwork and delete buttons, and their `i` and `x` keys. Both stay
+  available to the DJ and on the command line (`omacrate playlist art`,
+  `omacrate playlist delete`); in Plex's own apps you can do both too.
+
 ## [v0.2.7] - 2026-11-19
 
 ### Security
