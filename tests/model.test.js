@@ -70,7 +70,7 @@ test("markup in a title stays text", function() {
   assert.equal(row.title, "<img src=x> Pelota")
   assert.equal(M.barLabel(list[0]), "<img src=x> Pelota")
   // The panel and the bar must draw these as plain text.
-  for (const file of ["Panel.qml", "RowItem.qml", "SettingsView.qml"]) {
+  for (const file of ["Panel.qml", "RowItem.qml", "SettingsView.qml", "DjDock.qml"]) {
     assert.doesNotMatch(fs.readFileSync(path.join(__dirname, "..", file), "utf8"), /Text\.(RichText|StyledText|MarkdownText|AutoText)/)
     const qml = fs.readFileSync(path.join(__dirname, "..", file), "utf8")
     const texts = qml.split(/\n\s*Text \{/).slice(1)
@@ -215,21 +215,24 @@ test("the last line of an error is what the panel shows", function() {
 })
 
 test("settings default to showing the title", function() {
-  assert.deepEqual(M.settings(null), { showTitle: true, dj: false })
-  assert.deepEqual(M.settings({ showTitle: false }), { showTitle: false, dj: false })
-  assert.deepEqual(M.settings({ showTitle: "no" }), { showTitle: true, dj: false })
+  assert.deepEqual(M.settings(null), { showTitle: true, dj: false, djDock: false })
+  assert.deepEqual(M.settings({ showTitle: false }), { showTitle: false, dj: false, djDock: false })
+  assert.deepEqual(M.settings({ showTitle: "no" }), { showTitle: true, dj: false, djDock: false })
 })
 
 test("the DJ is off unless the bar entry turns it on", function() {
   assert.equal(M.settings({ dj: "yes" }).dj, false)
   assert.equal(M.settings({ dj: 1 }).dj, false)
   assert.equal(M.settings({ dj: true }).dj, true)
+  assert.equal(M.settings({ djDock: "yes" }).djDock, false)
+  assert.equal(M.settings({ djDock: true }).djDock, true)
+  assert.equal(M.settingsPayload({ dj: true, djDock: true }).djDock, true)
   const config = { bar: { layout: { left: [{ id: "omarchy.menu" }], centerEnd: [{ id: M.PLUGIN_ID, dj: true, showTitle: false }] } } }
-  assert.deepEqual(M.pluginSettings(config), { showTitle: false, dj: true })
-  assert.deepEqual(M.pluginSettings({ bar: { layout: { right: [{ id: M.PLUGIN_ID }] } } }), { showTitle: true, dj: false })
-  assert.deepEqual(M.pluginSettings(null), { showTitle: true, dj: false })
-  assert.deepEqual(M.pluginSettings({ bar: { layout: { right: "x" } } }), { showTitle: true, dj: false })
-  assert.deepEqual(M.settingsPayload({ dj: true }), { id: M.PLUGIN_ID, showTitle: true, dj: true })
+  assert.deepEqual(M.pluginSettings(config), { showTitle: false, dj: true, djDock: false })
+  assert.deepEqual(M.pluginSettings({ bar: { layout: { right: [{ id: M.PLUGIN_ID }] } } }), { showTitle: true, dj: false, djDock: false })
+  assert.deepEqual(M.pluginSettings(null), { showTitle: true, dj: false, djDock: false })
+  assert.deepEqual(M.pluginSettings({ bar: { layout: { right: "x" } } }), { showTitle: true, dj: false, djDock: false })
+  assert.deepEqual(M.settingsPayload({ dj: true }), { id: M.PLUGIN_ID, showTitle: true, dj: true, djDock: false })
   // The service must not look for an agent while the DJ is off.
   const service = fs.readFileSync(path.join(__dirname, "..", "Service.qml"), "utf8")
   assert.match(service, /function checkAgent\(\) \{\s+if \(!root\.options\.dj\)/)
@@ -263,4 +266,17 @@ test("plain http needs a yes only when it leaves this computer", function() {
   assert.equal(M.lidarrCleartext("http://127.0.0.1:8686/lidarr"), false)
   assert.equal(M.lidarrCleartext("http://[::1]:8686"), false)
   assert.equal(M.lidarrCleartext(""), false)
+})
+
+test("the DJ dock shows the playlist changed last", function() {
+  const list = M.items([
+    Object.assign({}, PLAYLIST, { key: "playlist:900", updated: 100 }),
+    Object.assign({}, PLAYLIST, { key: "playlist:901", title: "Late Drive", updated: 300 }),
+    Object.assign({}, PLAYLIST, { key: "playlist:902", updated: 200 }),
+    ALBUM
+  ])
+  assert.equal(M.latestPlaylist(list).key, "playlist:901")
+  assert.equal(M.latestPlaylist([ALBUM]), null)
+  assert.equal(M.latestPlaylist("no"), null)
+  assert.equal(M.items([Object.assign({}, PLAYLIST, { updated: "soon" })])[0].updated, 0)
 })

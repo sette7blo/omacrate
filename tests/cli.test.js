@@ -148,6 +148,10 @@ test("a playlist gets artwork from a JPEG or PNG, and can be deleted", async fun
   assert.notEqual(run(["playlist", "delete", "901"]).code, 0)
   assert.deepEqual(JSON.parse(ok(["--json", "--connection", here, "playlist", "delete", "playlist:901"])), { key: "playlist:901", deleted: true })
   assert.equal(json(["playlists"]).some(function(p) { return p.key === "playlist:901" }), false)
+  // Only playlists carry the time of their last change, for the DJ dock.
+  const sunday = json(["playlists"]).filter(function(p) { return p.key === "playlist:900" })[0]
+  assert.equal(sunday.updated, 1763900000)
+  assert.equal("updated" in json(["artists"])[0], false)
   assert.notEqual(run(["playlist", "delete", "playlist:901"]).code, 0)
 })
 
@@ -623,7 +627,7 @@ test("the DJ opens the agent with its own permission prompts, never a bypass fla
   // Lidarr is set up from the tests above, but the DJ has not been allowed it.
   let argv = await launch(["dj", "something mellow"])
   const at = argv.indexOf("codex")
-  assert.deepEqual(argv.slice(0, 2), ["--app-id=org.omarchy.agent", "env"])
+  assert.deepEqual(argv.slice(0, 2), ["--app-id=org.omarchy.agent.omacrate", "env"])
   assert.ok(argv.slice(2, at).indexOf("OMACRATE_DJ=1") !== -1, "the agent runs without OMACRATE_DJ=1")
   assert.equal(argv[at + 1], "--")
   let prompt = argv[at + 2]

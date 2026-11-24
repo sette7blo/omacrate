@@ -49,7 +49,8 @@ function settings(raw) {
   var data = raw && typeof raw === "object" ? raw : {}
   // The DJ is the one feature that involves an AI agent. It is off until the
   // user turns it on.
-  return { showTitle: data.showTitle !== false, dj: data.dj === true }
+  // The dock beside the DJ terminal is a second choice, also off by default.
+  return { showTitle: data.showTitle !== false, dj: data.dj === true, djDock: data.djDock === true }
 }
 
 // The widget's own entry in shell.json holds its settings.
@@ -68,7 +69,7 @@ function pluginSettings(config) {
 
 function settingsPayload(raw) {
   var data = settings(raw)
-  return { id: PLUGIN_ID, showTitle: data.showTitle, dj: data.dj }
+  return { id: PLUGIN_ID, showTitle: data.showTitle, dj: data.dj, djDock: data.djDock }
 }
 
 // The panel's volume slider works in steps of five, from 0 to 100.
@@ -156,7 +157,9 @@ function item(raw) {
     year: year >= 1000 && year <= 9999 ? year : 0,
     seconds: count(raw.seconds),
     count: count(raw.count),
-    genres: genres(raw.genres)
+    genres: genres(raw.genres),
+    // Seconds since 1970 of the last change; only playlists carry it.
+    updated: count(raw.updated)
   }
 }
 
@@ -236,6 +239,19 @@ function rows(list, within) {
   var out = []
   for (var i = 0; i < list.length; i++) out.push(row(list[i], within))
   return out
+}
+
+// The playlist changed most recently, for the DJ dock. A tie goes to the
+// first one listed.
+function latestPlaylist(list) {
+  var best = null
+  var all = Array.isArray(list) ? list : []
+  for (var i = 0; i < all.length; i++) {
+    var one = all[i]
+    if (!one || one.type !== "playlist") continue
+    if (!best || one.updated > best.updated) best = one
+  }
+  return best
 }
 
 function queueRows(queue, position) {
@@ -423,7 +439,7 @@ if (typeof module !== "undefined" && module.exports) {
     text: text, clock: clock, settings: settings, pluginSettings: pluginSettings,
     settingsPayload: settingsPayload, linkInfo: linkInfo, sameLink: sameLink,
     linkSummary: linkSummary, isKey: isKey, lidarrCleartext: lidarrCleartext, item: item, items: items, parseQueue: parseQueue,
-    rows: rows, queueRows: queueRows, tabs: tabs, nextTab: nextTab, tabRequest: tabRequest,
+    rows: rows, queueRows: queueRows, latestPlaylist: latestPlaylist, tabs: tabs, nextTab: nextTab, tabRequest: tabRequest,
     usersRequest: usersRequest, listRequest: listRequest,
     playArgs: playArgs, addArgs: addArgs, userRows: userRows, userArgs: userArgs, hints: hints, mpvLine: mpvLine,
     mpvSubscribe: mpvSubscribe, mpvEvent: mpvEvent, volumeStep: volumeStep, volumeGlyph: volumeGlyph, barLabel: barLabel, nowLine: nowLine,

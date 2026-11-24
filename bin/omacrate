@@ -258,7 +258,8 @@ def item:
       seconds: (((.duration // 0) / 1000) | floor),
       count: (.leafCount // .childCount // null),
       genres: [.Genre // [] | .[].tag],
-      part: (.Media[0].Part[0].key // "") };
+      part: (.Media[0].Part[0].key // "") }
+    + (if $t == "playlist" and (.updatedAt | type) == "number" then { updated: .updatedAt } else {} end);
 def items: [.MediaContainer.Metadata // [] | .[] | item];
 '
 
@@ -1048,7 +1049,10 @@ cmd_dj() {
 
   # Agents will not remember trust for $HOME, so start where Omarchy does.
   [[ -d "$HOME/Work" ]] && cd "$HOME/Work"
-  omarchy-launch-tui --app-id=org.omarchy.agent "${DJ_CMD[@]}" >/dev/null 2>&1 &
+  # The DJ's own app-id, which the DJ dock follows; other agent windows
+  # (omarchy-agent, the console, other plugins) use org.omarchy.agent. It stays
+  # under org.omarchy. so Omarchy's terminal window rules still apply.
+  omarchy-launch-tui --app-id=org.omarchy.agent.omacrate "${DJ_CMD[@]}" >/dev/null 2>&1 &
   disown
 }
 

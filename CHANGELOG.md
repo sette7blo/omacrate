@@ -6,6 +6,16 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- DJ dock, off by default: with **Dock the DJ panel** on, Ask DJ opens the DJ on the first
+  empty workspace with a panel docked beside it showing what is playing, the queue and the
+  playlist changed most recently. It follows only the DJ's own terminal and closes with it.
+- `omacrate --json playlists` gives each playlist an `updated` time (its last change).
+
+### Changed
+- The DJ terminal opens with its own app-id, `org.omarchy.agent.omacrate`, instead of
+  `org.omarchy.agent`.
+
 ### Removed
 - The panel's playlist artwork and delete buttons, and their `i` and `x` keys. Both stay
   available to the DJ and on the command line (`omacrate playlist art`,

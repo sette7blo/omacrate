@@ -123,7 +123,7 @@ The gear in the header opens the settings:
   yet. See [Lidarr](#lidarr-optional).
 - **Bar**: show or hide the track title next to the note.
 - **AI DJ**: off by default, and Lidarr is a second, separate yes for it.
-  See [DJ](#dj).
+  The DJ dock is a third switch, also off. See [DJ](#dj).
 
 ### Plex Home users
 
@@ -182,6 +182,23 @@ and needs no setting, since typing it is asking for it.
 omacrate dj
 omacrate dj "an hour of mellow funk for cooking"
 ```
+
+### DJ dock
+
+With **Dock the DJ panel** switched on as well (off by default), **Ask DJ**
+moves to the first empty workspace on your monitor, docks a narrow panel on
+the left edge and opens the DJ terminal beside it, tiled into the rest of the
+screen. The panel shows what is playing, the queue, and the playlist changed
+most recently with its tracks, so you can watch a playlist fill up while the
+DJ builds it. It shows only on the DJ's workspace. A second **Ask DJ** goes
+back to the open DJ instead of starting another. Closing the terminal takes
+the panel away; the panel's close button closes both.
+
+Now playing and the queue update as they always do, from mpv and the queue
+file. The playlist list is read again every 15 seconds while the panel is on
+screen, and not at all otherwise. The DJ's terminal has its own app-id,
+`org.omarchy.agent.omacrate`, so the panel never follows another agent
+window.
 
 The agent opens with its normal permission prompts, so it asks before it
 runs a command, unless you have allowed that command in the agent's own
@@ -357,6 +374,7 @@ BarWidget.qml              The note and track title on the bar
 Panel.qml                  The panel: search, list, now playing
 RowItem.qml                One row of the list
 SettingsView.qml           Plex account, bar and DJ settings
+DjDock.qml                 The panel docked beside the DJ terminal
 qml/NoteIcon.qml           The icon
 Model.js                   Parsing and row building (no QML)
 bin/omacrate               Command line tool: Plex, player, Lidarr, DJ
