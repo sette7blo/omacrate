@@ -241,17 +241,57 @@ function rows(list, within) {
   return out
 }
 
-// The playlist changed most recently, for the DJ dock. A tie goes to the
-// first one listed.
-function latestPlaylist(list) {
-  var best = null
-  var all = Array.isArray(list) ? list : []
-  for (var i = 0; i < all.length; i++) {
-    var one = all[i]
-    if (!one || one.type !== "playlist") continue
-    if (!best || one.updated > best.updated) best = one
+// ----- DJ dock -----
+
+var DOCK_TABS = ["dj", "playlists", "library", "queue"]
+
+function dockTabs(queued) {
+  return [
+    { value: "dj", label: "DJ" },
+    { value: "playlists", label: "Playlists" },
+    { value: "library", label: "Library" },
+    { value: "queue", label: queued > 0 ? "Queue " + queued : "Queue" }
+  ]
+}
+
+// Playlists, the one changed most recently first. Keeps the server's order
+// for ties.
+function playlistsByChange(list) {
+  var all = Array.isArray(list) ? list.filter(function(p) { return p && p.type === "playlist" }) : []
+  var indexed = all.map(function(p, i) { return { p: p, i: i } })
+  indexed.sort(function(a, b) { return (b.p.updated - a.p.updated) || (a.i - b.i) })
+  return indexed.map(function(x) { return x.p })
+}
+
+// Playlist rows for the dock; the one the DJ just changed is marked.
+function playlistRows(list, changed) {
+  var out = rows(playlistsByChange(list), "playlists")
+  for (var i = 0; i < out.length; i++) {
+    if (changed && out[i].key === changed) out[i].label = "Just changed"
   }
-  return best
+  return out
+}
+
+var VIEW_WITHIN = ["search", "artists", "recent", "artist", "playlist", "playlists"]
+
+// What the DJ looked at last, from the file `omacrate` writes under the DJ.
+// One saved before `since` (seconds) belongs to an earlier session and is
+// ignored. Everything in it came from the server, so it goes through the
+// same checks as any list.
+function djView(raw, since) {
+  var data = typeof raw === "string" ? parseJson(raw) : raw
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null
+  var at = count(data.at)
+  if (!at || at < count(since)) return null
+  var within = VIEW_WITHIN.indexOf(String(data.within || "")) >= 0 ? String(data.within) : "search"
+  var changed = /^playlist:[0-9]+$/.test(String(data.changed || "")) ? String(data.changed) : ""
+  return {
+    title: text(data.title, 80) || "The DJ's list",
+    within: within,
+    changed: changed,
+    at: at,
+    items: items(data.items, MAX_ROWS)
+  }
 }
 
 function queueRows(queue, position) {
@@ -439,7 +479,7 @@ if (typeof module !== "undefined" && module.exports) {
     text: text, clock: clock, settings: settings, pluginSettings: pluginSettings,
     settingsPayload: settingsPayload, linkInfo: linkInfo, sameLink: sameLink,
     linkSummary: linkSummary, isKey: isKey, lidarrCleartext: lidarrCleartext, item: item, items: items, parseQueue: parseQueue,
-    rows: rows, queueRows: queueRows, latestPlaylist: latestPlaylist, tabs: tabs, nextTab: nextTab, tabRequest: tabRequest,
+    rows: rows, queueRows: queueRows, dockTabs: dockTabs, playlistsByChange: playlistsByChange, playlistRows: playlistRows, djView: djView, tabs: tabs, nextTab: nextTab, tabRequest: tabRequest,
     usersRequest: usersRequest, listRequest: listRequest,
     playArgs: playArgs, addArgs: addArgs, userRows: userRows, userArgs: userArgs, hints: hints, mpvLine: mpvLine,
     mpvSubscribe: mpvSubscribe, mpvEvent: mpvEvent, volumeStep: volumeStep, volumeGlyph: volumeGlyph, barLabel: barLabel, nowLine: nowLine,

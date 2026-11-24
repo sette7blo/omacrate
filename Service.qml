@@ -511,7 +511,6 @@ Item {
   // DJ's is the first one with it that was not open before the launch. Nothing
   // here runs unless the DJ and the dock are both on and Ask DJ was pressed.
   readonly property string djAppId: "org.omarchy.agent.omacrate"
-  readonly property int djRefreshSeconds: 15
   property bool djDocked: false
   property string djMonitorName: ""
   property string djAddress: ""
@@ -519,10 +518,13 @@ Item {
   // Set when the dock is closed before its terminal has appeared, so the
   // terminal is closed as soon as it does.
   property bool djClosePending: false
-  // The playlist changed most recently, and its tracks, read while docked.
-  property var djPlaylist: null
-  property var djPlaylistTracks: []
-  property bool djPlaylistLoaded: false
+  // What the DJ looked at last (from the file `omacrate` writes while it runs
+  // under the DJ), and the playlists, read while docked.
+  property var djView: null
+  property int djSince: 0
+  property string djChanged: ""
+  property var djPlaylists: []
+  property bool djPlaylistsLoaded: false
 
   // Followed only while docked or waiting to close a late terminal, so
   // window changes cost nothing the rest of the time.
@@ -608,8 +610,11 @@ Item {
     djLaunchTimer.restart()
     djWaitTimer.restart()
     root.djClosePending = false
+    root.djView = null
+    root.djChanged = ""
+    root.djSince = Math.floor(Date.now() / 1000) - 2
     root.djDocked = true
-    root.refreshDjPlaylist()
+    root.refreshDjPlaylists()
   }
 
   function closeDjDock() {
@@ -617,9 +622,10 @@ Item {
     djWaitTimer.stop()
     root.djDocked = false
     root.djAddress = ""
-    root.djPlaylist = null
-    root.djPlaylistTracks = []
-    root.djPlaylistLoaded = false
+    root.djView = null
+    root.djChanged = ""
+    root.djPlaylists = []
+    root.djPlaylistsLoaded = false
     if (!root.djClosePending) root.djKnownAddresses = []
   }
 
@@ -698,57 +704,50 @@ Item {
     onExited: function(code) { if (code !== 0) root.closeDjDock() }
   }
 
-  // The playlist list is read again while the dock is on screen, so a playlist
-  // the DJ saves or changes shows up; its tracks are read only when it is a
-  // different playlist or it changed. Now playing and the queue need no
-  // timer: they come from the queue file and mpv's socket as always.
-  Timer {
-    interval: root.djRefreshSeconds * 1000
-    repeat: true
-    running: root.djDocked && root.djDockShown
-    onTriggered: root.refreshDjPlaylist()
+  // The DJ view is a file `omacrate` replaces after each lookup it runs under
+  // the DJ, so the dock follows the conversation without a timer. It is
+  // watched only while docked. When the DJ saved or changed a playlist, the
+  // playlist list is read again.
+  FileView {
+    id: djViewFile
+    path: root.djDocked ? root.runDir + "/dj-view.json" : ""
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      var next = Model.djView(text(), root.djSince)
+      if (!next) return
+      root.djView = next
+      if (next.changed) {
+        root.djChanged = next.changed
+        root.refreshDjPlaylists()
+      }
+    }
+    onFileChanged: reload()
   }
 
-  function refreshDjPlaylist() {
-    if (!root.djDocked || !root.linked || djListProc.running) return
-    djListProc.step = "playlists"
-    djListProc.command = [root.cli, "--json", "playlists"]
-    djListProc.running = true
+  function refreshDjPlaylists() {
+    if (!root.djDocked || !root.linked) return
+    if (djPlaylistsProc.running) {
+      djPlaylistsProc.again = true
+      return
+    }
+    djPlaylistsProc.command = [root.cli, "--json", "playlists"]
+    djPlaylistsProc.running = true
   }
 
   Process {
-    id: djListProc
-    property string step: ""
+    id: djPlaylistsProc
+    property bool again: false
     running: false
-    stdout: StdioCollector { id: djListOut; waitForEnd: true }
+    stdout: StdioCollector { id: djPlaylistsOut; waitForEnd: true }
     onExited: function(code) {
       if (!root.djDocked) return
-      if (code !== 0) {
-        root.djPlaylistLoaded = true
-        return
+      if (code === 0) root.djPlaylists = Model.items(String(djPlaylistsOut.text || ""))
+      root.djPlaylistsLoaded = true
+      if (djPlaylistsProc.again) {
+        djPlaylistsProc.again = false
+        Qt.callLater(root.refreshDjPlaylists)
       }
-      if (djListProc.step === "playlists") {
-        var latest = Model.latestPlaylist(Model.items(String(djListOut.text || "")))
-        var shown = root.djPlaylist
-        if (!latest) {
-          root.djPlaylist = null
-          root.djPlaylistTracks = []
-          root.djPlaylistLoaded = true
-          return
-        }
-        root.djPlaylist = latest
-        if (shown && root.djPlaylistLoaded && shown.key === latest.key && shown.updated === latest.updated) return
-        djListProc.step = "tracks:" + latest.key
-        Qt.callLater(function() {
-          djListProc.command = [root.cli, "--json", "tracks", latest.key]
-          djListProc.running = true
-        })
-        return
-      }
-      // An answer for a playlist that is no longer the latest is dropped.
-      if (!root.djPlaylist || djListProc.step !== "tracks:" + root.djPlaylist.key) return
-      root.djPlaylistTracks = Model.items(String(djListOut.text || ""))
-      root.djPlaylistLoaded = true
     }
   }
 

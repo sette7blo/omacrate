@@ -268,15 +268,35 @@ test("plain http needs a yes only when it leaves this computer", function() {
   assert.equal(M.lidarrCleartext(""), false)
 })
 
-test("the DJ dock shows the playlist changed last", function() {
+test("the DJ dock lists playlists by their last change and marks the DJ's", function() {
   const list = M.items([
     Object.assign({}, PLAYLIST, { key: "playlist:900", updated: 100 }),
     Object.assign({}, PLAYLIST, { key: "playlist:901", title: "Late Drive", updated: 300 }),
     Object.assign({}, PLAYLIST, { key: "playlist:902", updated: 200 }),
+    Object.assign({}, PLAYLIST, { key: "playlist:903" }),
     ALBUM
   ])
-  assert.equal(M.latestPlaylist(list).key, "playlist:901")
-  assert.equal(M.latestPlaylist([ALBUM]), null)
-  assert.equal(M.latestPlaylist("no"), null)
+  assert.deepEqual(M.playlistsByChange(list).map(function(p) { return p.key }),
+    ["playlist:901", "playlist:902", "playlist:900", "playlist:903"])
+  const rows = M.playlistRows(list, "playlist:902")
+  assert.equal(rows[1].label, "Just changed")
+  assert.equal(rows[0].label, "")
+  assert.deepEqual(M.playlistsByChange("no"), [])
   assert.equal(M.items([Object.assign({}, PLAYLIST, { updated: "soon" })])[0].updated, 0)
+})
+
+test("the DJ view is checked like any list and ignored when stale", function() {
+  const raw = JSON.stringify({ title: "Search: funk", within: "search", changed: "", at: 500, items: [TRACK, { key: "../x", type: "track" }] })
+  const view = M.djView(raw, 400)
+  assert.equal(view.title, "Search: funk")
+  assert.equal(view.items.length, 1)
+  assert.equal(M.djView(raw, 600), null)
+  assert.equal(M.djView("{}", 0), null)
+  assert.equal(M.djView("not json", 0), null)
+  const odd = M.djView({ title: "", within: "<b>", changed: "rm -rf", at: 1, items: "x" }, 0)
+  assert.equal(odd.within, "search")
+  assert.equal(odd.changed, "")
+  assert.deepEqual(odd.items, [])
+  assert.equal(M.djView({ within: "playlist", changed: "playlist:9", at: 1, items: [] }, 0).changed, "playlist:9")
+  assert.deepEqual(M.dockTabs(3).map(function(t) { return t.label }), ["DJ", "Playlists", "Library", "Queue 3"])
 })

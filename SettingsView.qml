@@ -312,7 +312,7 @@ Column {
       width: parent.width
       visible: root.options.dj
       label: "Dock the DJ panel"
-      description: "Ask DJ opens the DJ on an empty workspace, with a panel beside it showing what is playing, the queue and the latest playlist."
+      description: "Ask DJ opens the DJ on an empty workspace with a panel beside it: what the DJ is looking at, your playlists, your library and the queue."
       checked: root.options.djDock
       foreground: root.foreground
       accent: root.accent

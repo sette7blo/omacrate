@@ -22,8 +22,8 @@ no longer has playlist artwork and delete buttons (the DJ and the CLI keep both)
 
 ## Standing constraints
 
-- Nothing runs while idle: no polling, no helper process. The DJ dock reads the playlist
-  list every 15 s only while it is on screen.
+- Nothing runs while idle: no polling, no helper process. The DJ dock has no timer either:
+  it watches the DJ's view file only while docked.
 - No visualiser, waveform, equaliser, album-derived colours or radio.
 - The DJ, the only AI feature, is off until the user turns it on in the settings, and the
   agent skills are never linked without a separate button press.

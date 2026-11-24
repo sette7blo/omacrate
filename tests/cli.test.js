@@ -97,6 +97,33 @@ test("a playlist is saved with the server's machine id and the track keys", asyn
   assert.equal(q.get("uri"), "server://machine-1/com.plexapp.plugins.library/library/metadata/300,301,302,310")
 })
 
+test("under the DJ, lookups and playlist changes are saved for the dock", function() {
+  const view = path.join(env.XDG_RUNTIME_DIR, "omacrate", "dj-view.json")
+  const dj = function(args) {
+    const out = spawnSync(CLI, args, { env: Object.assign({}, env, { OMACRATE_DJ: "1" }), encoding: "utf8", timeout: 60000 })
+    assert.equal(out.status, 0, out.stderr)
+    return out.stdout
+  }
+  fs.rmSync(view, { force: true })
+  // Typed by you: nothing is saved.
+  ok(["search", "mordechai"])
+  assert.equal(fs.existsSync(view), false)
+  // The DJ gets the same output as before, and the dock gets the result.
+  assert.equal(dj(["--json", "search", "mordechai"]).trim(), ok(["--json", "search", "mordechai"]))
+  let saved = JSON.parse(fs.readFileSync(view, "utf8"))
+  assert.equal(saved.title, "Search: mordechai")
+  assert.equal(saved.within, "search")
+  assert.equal(saved.changed, "")
+  assert.ok(saved.items.length > 0)
+  assert.equal(saved.items.some(function(i) { return "part" in i }), false)
+  assert.equal(fs.statSync(view).mode & 0o077, 0)
+  dj(["playlist", "add", "playlist:900", "300"])
+  saved = JSON.parse(fs.readFileSync(view, "utf8"))
+  assert.equal(saved.within, "playlist")
+  assert.equal(saved.changed, "playlist:900")
+  assert.ok(saved.items.every(function(i) { return i.type === "track" }))
+})
+
 test("a playlist gets artwork from a JPEG or PNG, and can be deleted", async function() {
   const png = path.join(tmp, "cover.png")
   fs.writeFileSync(png, Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), Buffer.alloc(200)]))
