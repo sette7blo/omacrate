@@ -123,7 +123,7 @@ The gear in the header opens the settings:
   yet. See [Lidarr](#lidarr-optional).
 - **Bar**: show or hide the track title next to the note.
 - **AI DJ**: off by default, and Lidarr is a second, separate yes for it.
-  See [DJ](#dj).
+  The DJ dock is a third switch, also off. See [DJ](#dj).
 
 ### Plex Home users
 
@@ -183,35 +183,36 @@ omacrate dj
 omacrate dj "an hour of mellow funk for cooking"
 ```
 
-The agent opens with its normal permission prompts, so it asks before it
-runs a command, unless you have allowed that command in the agent's own
-settings. Omarchy's agent launcher switches those prompts off; the DJ does
-not use it, because the agent reads text other people can write (tags in
-downloaded files, MusicBrainz data through Lidarr), and such text could
-carry instructions. The DJ is also told to treat all of it as data.
+### DJ dock
 
-There is no AI and no API key in the plugin. The agent is the one you
-already use, and it works through the `omacrate` command, so it never needs
-your Plex token (it could still read it, see
-[The DJ and Lidarr](#the-dj-and-lidarr)). It looks things up and plays
-without asking, and asks before anything that changes your server.
+With **Dock the DJ panel** switched on as well (off by default), **Ask DJ**
+moves to the first empty workspace on your monitor, docks a panel on the left
+edge and opens the DJ terminal beside it, tiled into the rest of the screen.
+The panel has four tabs:
 
-The agent is pointed at three skill files in `agent-skill/` by path, so
-nothing has to be installed for the DJ. Linking the skills into your agents'
-own skill folders is a second, separate choice, never made for you: press
-**Install agent skills** in the settings (shown once the DJ is on), or run:
+- **DJ**: the list the DJ looked at last: a search, an artist's albums, a
+  playlist's tracks, or the playlist it just saved or changed. It updates as
+  the DJ works, so you see what it is talking about.
+- **Playlists**: all of them, the one changed most recently first; the one
+  the DJ just changed is marked.
+- **Library**: recently added albums and every artist.
+- **Queue**: what is queued, with the playing track marked.
 
-```sh
-~/.config/omarchy/plugins/io.github.sette7blo.omacrate/install.sh --skills
-```
+Click a row to open it (artist, album, playlist) or play it (track), as in
+the panel; Back returns, and an open album or playlist has Play and Shuffle.
+What is playing sits at the bottom with previous, pause and next. The
+keyboard stays with the terminal. The panel shows only on the DJ's workspace;
+a second **Ask DJ** goes back to the open DJ. Closing the terminal takes the
+panel away, and the panel's close button closes both.
 
-- **omacrate-library**: look through the library and play from it
-- **omacrate-playlist**: build a playlist and save it, after confirmation
-- **omacrate-add-artist**: add an artist through Lidarr, after confirmation;
-  only for the DJ when you allow it (see below)
-
-**Remove agent skills** in the settings, or `uninstall.sh --skills`, removes
-the links again.
+How it follows the DJ: a lookup or playlist change that `omacrate` runs under
+`omacrate dj` also saves its result to `dj-view.json` in omacrate's private
+runtime folder (`$XDG_RUNTIME_DIR/omacrate`, mode 700), and the panel watches
+that file while it is docked. Commands you type yourself save nothing.
+Nothing leaves your computer for this, and there is no timer: the playlist
+list is read when the panel opens and after the DJ changes a playlist. The
+DJ's terminal has its own app-id, `org.omarchy.agent.omacrate`, so the panel
+never follows another agent window.
 
 ### The DJ and Lidarr
 
@@ -357,6 +358,8 @@ BarWidget.qml              The note and track title on the bar
 Panel.qml                  The panel: search, list, now playing
 RowItem.qml                One row of the list
 SettingsView.qml           Plex account, bar and DJ settings
+DjDock.qml                 The panel docked beside the DJ terminal
+DockRows.qml               A list of rows in the dock
 qml/NoteIcon.qml           The icon
 Model.js                   Parsing and row building (no QML)
 bin/omacrate               Command line tool: Plex, player, Lidarr, DJ

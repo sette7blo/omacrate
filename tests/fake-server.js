@@ -37,7 +37,7 @@ const tracks = [
   track(302, "<img src=x> Pelota", "Mordechai", "Khruangbin", "200", "100"),
   track(310, "La femme d'argent", "Moon Safari", "Air", "201", "101")
 ]
-const playlists = [{ ratingKey: "900", type: "playlist", title: "Sunday", leafCount: 2, duration: 60000, items: ["300", "310"] }]
+const playlists = [{ ratingKey: "900", type: "playlist", title: "Sunday", leafCount: 2, duration: 60000, updatedAt: 1763900000, items: ["300", "310"] }]
 const lidarrArtists = [
   { artistName: "Altin Gun", foreignArtistId: "11111111-2222-3333-4444-555555555555", id: 0 },
   { artistName: "Air", foreignArtistId: "99999999-2222-3333-4444-555555555555", id: 7 }

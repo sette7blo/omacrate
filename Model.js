@@ -49,7 +49,8 @@ function settings(raw) {
   var data = raw && typeof raw === "object" ? raw : {}
   // The DJ is the one feature that involves an AI agent. It is off until the
   // user turns it on.
-  return { showTitle: data.showTitle !== false, dj: data.dj === true }
+  // The dock beside the DJ terminal is a second choice, also off by default.
+  return { showTitle: data.showTitle !== false, dj: data.dj === true, djDock: data.djDock === true }
 }
 
 // The widget's own entry in shell.json holds its settings.
@@ -68,7 +69,7 @@ function pluginSettings(config) {
 
 function settingsPayload(raw) {
   var data = settings(raw)
-  return { id: PLUGIN_ID, showTitle: data.showTitle, dj: data.dj }
+  return { id: PLUGIN_ID, showTitle: data.showTitle, dj: data.dj, djDock: data.djDock }
 }
 
 // The panel's volume slider works in steps of five, from 0 to 100.
@@ -156,7 +157,9 @@ function item(raw) {
     year: year >= 1000 && year <= 9999 ? year : 0,
     seconds: count(raw.seconds),
     count: count(raw.count),
-    genres: genres(raw.genres)
+    genres: genres(raw.genres),
+    // Seconds since 1970 of the last change; only playlists carry it.
+    updated: count(raw.updated)
   }
 }
 
@@ -236,6 +239,69 @@ function rows(list, within) {
   var out = []
   for (var i = 0; i < list.length; i++) out.push(row(list[i], within))
   return out
+}
+
+// ----- DJ dock -----
+
+var DOCK_TABS = ["dj", "playlists", "library", "queue"]
+
+function dockTabs(queued) {
+  return [
+    { value: "dj", label: "DJ" },
+    { value: "playlists", label: "Playlists" },
+    { value: "library", label: "Library" },
+    { value: "queue", label: queued > 0 ? "Queue " + queued : "Queue" }
+  ]
+}
+
+// Playlists, the one changed most recently first. Keeps the server's order
+// for ties.
+function playlistsByChange(list) {
+  var all = Array.isArray(list) ? list.filter(function(p) { return p && p.type === "playlist" }) : []
+  var indexed = all.map(function(p, i) { return { p: p, i: i } })
+  indexed.sort(function(a, b) { return (b.p.updated - a.p.updated) || (a.i - b.i) })
+  return indexed.map(function(x) { return x.p })
+}
+
+// Playlist rows for the dock; the one the DJ just changed is marked.
+function playlistRows(list, changed) {
+  var out = rows(playlistsByChange(list), "playlists")
+  for (var i = 0; i < out.length; i++) {
+    if (changed && out[i].key === changed) out[i].label = "Just changed"
+  }
+  return out
+}
+
+// The playlist to mark after a DJ view. A saved or changed playlist is marked;
+// a deleted one (a playlists view) is not, and a mark on it goes, so an
+// earlier mark survives the DJ replacing a playlist by saving a new one and
+// deleting the old.
+function djMark(current, view) {
+  if (!view || !view.changed) return current || ""
+  if (view.within === "playlist") return view.changed
+  return current === view.changed ? "" : (current || "")
+}
+
+var VIEW_WITHIN = ["search", "artists", "recent", "artist", "playlist", "playlists"]
+
+// What the DJ looked at last, from the file `omacrate` writes under the DJ.
+// One saved before `since` (seconds) belongs to an earlier session and is
+// ignored. Everything in it came from the server, so it goes through the
+// same checks as any list.
+function djView(raw, since) {
+  var data = typeof raw === "string" ? parseJson(raw) : raw
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null
+  var at = count(data.at)
+  if (!at || at < count(since)) return null
+  var within = VIEW_WITHIN.indexOf(String(data.within || "")) >= 0 ? String(data.within) : "search"
+  var changed = /^playlist:[0-9]+$/.test(String(data.changed || "")) ? String(data.changed) : ""
+  return {
+    title: text(data.title, 80) || "The DJ's list",
+    within: within,
+    changed: changed,
+    at: at,
+    items: items(data.items, MAX_ROWS)
+  }
 }
 
 function queueRows(queue, position) {
@@ -423,7 +489,7 @@ if (typeof module !== "undefined" && module.exports) {
     text: text, clock: clock, settings: settings, pluginSettings: pluginSettings,
     settingsPayload: settingsPayload, linkInfo: linkInfo, sameLink: sameLink,
     linkSummary: linkSummary, isKey: isKey, lidarrCleartext: lidarrCleartext, item: item, items: items, parseQueue: parseQueue,
-    rows: rows, queueRows: queueRows, tabs: tabs, nextTab: nextTab, tabRequest: tabRequest,
+    rows: rows, queueRows: queueRows, dockTabs: dockTabs, playlistsByChange: playlistsByChange, playlistRows: playlistRows, djView: djView, djMark: djMark, tabs: tabs, nextTab: nextTab, tabRequest: tabRequest,
     usersRequest: usersRequest, listRequest: listRequest,
     playArgs: playArgs, addArgs: addArgs, userRows: userRows, userArgs: userArgs, hints: hints, mpvLine: mpvLine,
     mpvSubscribe: mpvSubscribe, mpvEvent: mpvEvent, volumeStep: volumeStep, volumeGlyph: volumeGlyph, barLabel: barLabel, nowLine: nowLine,

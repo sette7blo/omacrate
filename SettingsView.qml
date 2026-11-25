@@ -308,6 +308,18 @@ Column {
       font.pixelSize: Style.font.caption
     }
 
+    Toggle {
+      width: parent.width
+      visible: root.options.dj
+      label: "Dock the DJ panel"
+      description: "Ask DJ opens the DJ on an empty workspace with a panel beside it: what the DJ is looking at, your playlists, your library and the queue."
+      checked: root.options.djDock
+      foreground: root.foreground
+      accent: root.accent
+      fontFamily: root.fontFamily
+      onClicked: if (root.service) root.service.persistSettings({ djDock: !root.options.djDock })
+    }
+
     // A second yes, so the agent's provider does not learn what you download
     // or that Lidarr is there unless you want it to. It does not hide the key
     // from an agent running as the user; the description says so.

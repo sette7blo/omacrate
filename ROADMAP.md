@@ -2,14 +2,15 @@
 
 ## Where we are
 
-v0.1.0 released 2026-11-17 and submitted to the Omarchy plugin marketplace. The CLI is
-covered by tests against a stand-in server, and the plugin has been used against a real
-Plex server with Lidarr and the DJ. While the submission is in review, `main` stays at the
-submitted commit.
+v0.2.7 released 2026-11-19 and listed on the Omarchy plugin marketplace (#15215, approved
+2026-11-24). The CLI is covered by tests against a stand-in server, and the plugin is used
+daily against a real Plex server with Lidarr and the DJ. On `main` since v0.2.7: the panel
+no longer has playlist artwork and delete buttons (the DJ and the CLI keep both).
 
 ## Next, in order
 
-1. Answer the marketplace review; batch any fixes into one commit.
+1. DJ dock beside the DJ terminal (#11), then release and send a marketplace [Verify]
+   update after running the marketplace security baseline on the files.
 2. Try the DJ with the other supported agents (claude, codex, copilot).
 3. Translations: move the panel strings into `i18n/en.json`.
 
@@ -21,7 +22,8 @@ submitted commit.
 
 ## Standing constraints
 
-- Nothing runs while idle: no polling, no helper process.
+- Nothing runs while idle: no polling, no helper process. The DJ dock has no timer either:
+  it watches the DJ's view file only while docked.
 - No visualiser, waveform, equaliser, album-derived colours or radio.
 - The DJ, the only AI feature, is off until the user turns it on in the settings, and the
   agent skills are never linked without a separate button press.

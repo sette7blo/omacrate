@@ -11,6 +11,7 @@ RUN_BASE="${XDG_RUNTIME_DIR:-}"
 RUN_DIR="$RUN_BASE/omacrate"
 CRED="$STATE_DIR/credentials.json"
 QUEUE="$STATE_DIR/queue.json"
+DJ_VIEW="$RUN_DIR/dj-view.json"
 MPV_CONF="$STATE_DIR/mpv.conf"
 VOLUME_FILE="$STATE_DIR/volume"
 SOCK="$RUN_DIR/mpv.sock"
@@ -29,6 +30,29 @@ prepare() {
   chmod 700 "$STATE_DIR" "$RUN_DIR"
   [[ -e "$CRED" ]] || { (umask 077; echo '{}' > "$CRED"); }
   [[ -e "$QUEUE" ]] || { (umask 077; echo '[]' > "$QUEUE"); }
+  # Created up front so the DJ dock has a file to watch.
+  [[ -e "$DJ_VIEW" ]] || { (umask 077; echo '{}' > "$DJ_VIEW"); }
+}
+
+# What the DJ looked at last, for the DJ dock: a lookup run under `omacrate dj`
+# (OMACRATE_DJ=1) also saves its result here. It never changes what the
+# command prints, and a failure to save is ignored. Nothing is saved for
+# commands you type yourself.
+DJ_TITLE=""
+DJ_WITHIN=""
+DJ_CHANGED=""
+
+# dj_view <title> <within> [changed playlist key]: the items come on stdin.
+dj_view() {
+  [[ "${OMACRATE_DJ:-}" == 1 ]] || { cat >/dev/null; return 0; }
+  local tmp
+  {
+    mkdir -p "$RUN_DIR" && chmod 700 "$RUN_DIR" \
+      && tmp="$(mktemp -p "$RUN_DIR" .djview.XXXXXX)" \
+      && jq -c --arg t "$1" --arg w "$2" --arg c "${3:-}" \
+        '{title: $t, within: $w, changed: $c, at: (now | floor), items: (map(del(.part)) | .[:200])}' > "$tmp" \
+      && mv -f -- "$tmp" "$DJ_VIEW"
+  } 2>/dev/null || { [[ -n "${tmp:-}" ]] && rm -f -- "$tmp"; true; }
 }
 
 cred() {
@@ -258,11 +282,19 @@ def item:
       seconds: (((.duration // 0) / 1000) | floor),
       count: (.leafCount // .childCount // null),
       genres: [.Genre // [] | .[].tag],
-      part: (.Media[0].Part[0].key // "") };
+      part: (.Media[0].Part[0].key // "") }
+    + (if $t == "playlist" and (.updatedAt | type) == "number" then { updated: .updatedAt } else {} end);
 def items: [.MediaContainer.Metadata // [] | .[] | item];
 '
 
 emit() {
+  local data
+  data="$(cat)"
+  [[ -n "$DJ_TITLE" ]] && dj_view "$DJ_TITLE" "$DJ_WITHIN" <<<"$data"
+  printf '%s\n' "$data" | emit_out
+}
+
+emit_out() {
   if $JSON; then
     jq -c 'map(del(.part))'
   else
@@ -285,6 +317,7 @@ each_section() {
 cmd_search() {
   [[ $# -gt 0 ]] || die "usage: omacrate search <term>"
   require_sections
+  DJ_TITLE="Search: $*" DJ_WITHIN=search
   each_section "/hubs/search?query=$(uri "$*")&sectionId=SECTION&limit=15" '
     [.MediaContainer.Hub // [] | .[] | select(.type == "artist" or .type == "album" or .type == "track")
       | .Metadata // [] | .[] | item]' | emit
@@ -292,6 +325,7 @@ cmd_search() {
 
 cmd_artists() {
   require_sections
+  DJ_TITLE="Artists" DJ_WITHIN=artists
   each_section '/library/sections/SECTION/all?type=8' items | emit
 }
 
@@ -299,6 +333,7 @@ cmd_recent() {
   local n="${1:-30}"
   [[ "$n" =~ ^[0-9]+$ && "$n" -ge 1 && "$n" -le 200 ]] || die "count must be between 1 and 200"
   require_sections
+  DJ_TITLE="Recently added" DJ_WITHIN=recent
   each_section "/library/sections/SECTION/all?type=9&sort=addedAt:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=$n" items | emit
 }
 
@@ -308,6 +343,7 @@ is_playlist() { [[ "$1" =~ ^playlist:[0-9]+$ ]]; }
 cmd_albums() {
   is_key "${1:-}" || die "usage: omacrate albums <artist key>   (keys come from search or artists)"
   require_link
+  DJ_TITLE="Albums" DJ_WITHIN=artist
   plex GET "/library/metadata/$1/children" | jq -c "$JQ_ITEM items" | emit
 }
 
@@ -335,11 +371,20 @@ tracks_of() {
 
 cmd_tracks() {
   [[ $# -gt 0 ]] || die "usage: omacrate tracks <key>..."
+  DJ_TITLE="Tracks" DJ_WITHIN=playlist
   tracks_of "$@" | emit
+}
+
+# After the DJ saves or changes a playlist, the dock shows its tracks and marks
+# it in the playlist list.
+dj_show_playlist() {
+  [[ "${OMACRATE_DJ:-}" == 1 ]] || return 0
+  { tracks_of "$1" | dj_view "$2" playlist "$1"; } 2>/dev/null || true
 }
 
 cmd_playlists() {
   require_link
+  DJ_TITLE="Playlists" DJ_WITHIN=playlists
   plex GET '/playlists?playlistType=audio' | jq -c "$JQ_ITEM items" | emit
 }
 
@@ -416,6 +461,7 @@ cmd_playlist() {
       done
       if $JSON; then jq -cn --arg k "playlist:$id" --arg t "$title" --argjson n "${#keys[@]}" '{key: $k, title: $t, count: $n}'
       else printf 'Saved playlist "%s" with %d tracks as playlist:%s\n' "$title" "${#keys[@]}" "$id"; fi
+      dj_show_playlist "playlist:$id" "Saved: $title"
       ;;
     add)
       local target="${1:-}"
@@ -429,6 +475,7 @@ cmd_playlist() {
         plex PUT "/playlists/${target#playlist:}/items?uri=$(playlist_uri "$batch")" >/dev/null
       done
       printf 'Added %d tracks to %s\n' "${#keys[@]}" "$target"
+      dj_show_playlist "$target" "Playlist updated"
       ;;
     delete)
       local target="${1:-}"
@@ -436,6 +483,9 @@ cmd_playlist() {
       require_link
       plex DELETE "/playlists/${target#playlist:}" >/dev/null
       if $JSON; then jq -cn --arg k "$target" '{key: $k, deleted: true}'; else echo "Deleted $target"; fi
+      if [[ "${OMACRATE_DJ:-}" == 1 ]]; then
+        { plex GET '/playlists?playlistType=audio' | jq -c "$JQ_ITEM items" | dj_view "Playlist deleted" playlists "$target"; } 2>/dev/null || true
+      fi
       ;;
     art)
       local target="${1:-}" file="${2:-}" mime size
@@ -474,6 +524,7 @@ cmd_playlist() {
       fi
       plex_upload "/library/metadata/${target#playlist:}/posters" "$mime" "$file"
       if $JSON; then jq -cn --arg k "$target" '{key: $k, artwork: true}'; else echo "Set the artwork of $target"; fi
+      dj_show_playlist "$target" "Cover set"
       ;;
     *) die "usage: omacrate playlist create <title> <key>... | add <playlist key> <key>... | delete <playlist key> | art <playlist key> <image file>" ;;
   esac
@@ -1048,7 +1099,10 @@ cmd_dj() {
 
   # Agents will not remember trust for $HOME, so start where Omarchy does.
   [[ -d "$HOME/Work" ]] && cd "$HOME/Work"
-  omarchy-launch-tui --app-id=org.omarchy.agent "${DJ_CMD[@]}" >/dev/null 2>&1 &
+  # The DJ's own app-id, which the DJ dock follows; other agent windows
+  # (omarchy-agent, the console, other plugins) use org.omarchy.agent. It stays
+  # under org.omarchy. so Omarchy's terminal window rules still apply.
+  omarchy-launch-tui --app-id=org.omarchy.agent.omacrate "${DJ_CMD[@]}" >/dev/null 2>&1 &
   disown
 }
 

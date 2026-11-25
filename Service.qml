@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 import "Model.js" as Model
 
 // Background service. It never polls: it watches two small files the omacrate
@@ -91,7 +92,11 @@ Item {
     statusProc.running = true
   }
 
-  onOptionsChanged: root.checkAgent()
+  onOptionsChanged: {
+    root.checkAgent()
+    // Switching the DJ or the dock off takes the dock down; the terminal stays.
+    if (root.djDocked && (!root.options.dj || !root.options.djDock)) root.closeDjDock()
+  }
 
   // --- Agent skills --------------------------------------------------------
   // "" until checked, then installed, none or unavailable. Linked only when
@@ -496,5 +501,265 @@ Item {
     prepareProc.running = true
     installProc.command = [root.pluginDir + "/install.sh", "--if-needed"]
     installProc.running = true
+  }
+
+  // --- DJ dock --------------------------------------------------------------
+  // With the dock switched on, Ask DJ docks a panel on the left edge and opens
+  // the DJ terminal, which Hyprland tiles into the space left over. The
+  // terminal is detached, so it is followed by its window: `omacrate dj`
+  // launches it with the app-id below, used by no other agent window, and the
+  // DJ's is the first one with it that was not open before the launch. Nothing
+  // here runs unless the DJ and the dock are both on and Ask DJ was pressed.
+  readonly property string djAppId: "org.omarchy.agent.omacrate"
+  property bool djDocked: false
+  property string djMonitorName: ""
+  property string djAddress: ""
+  property var djKnownAddresses: []
+  // Set when the dock is closed before its terminal has appeared, so the
+  // terminal is closed as soon as it does.
+  property bool djClosePending: false
+  // What the DJ looked at last (from the file `omacrate` writes while it runs
+  // under the DJ), and the playlists, read while docked.
+  property var djView: null
+  property int djSince: 0
+  property string djChanged: ""
+  property var djPlaylists: []
+  property bool djPlaylistsLoaded: false
+
+  // Followed only while docked or waiting to close a late terminal, so
+  // window changes cost nothing the rest of the time.
+  readonly property var djWindows: root.djDocked || root.djClosePending ? root.djWindowList() : []
+
+  function djWindowList() {
+    var out = []
+    var list = Hyprland.toplevels ? Hyprland.toplevels.values : []
+    for (var i = 0; i < list.length; i++) {
+      var w = list[i].wayland
+      if (w && w.appId === root.djAppId) out.push(list[i])
+    }
+    return out
+  }
+  readonly property var djWindow: {
+    for (var i = 0; i < djWindows.length; i++) {
+      if (djWindows[i].address === root.djAddress) return djWindows[i]
+    }
+    return null
+  }
+  readonly property var djWorkspace: djWindow ? djWindow.workspace : null
+  readonly property var djMonitor: djWorkspace && djWorkspace.monitor
+    ? djWorkspace.monitor : root.monitorNamed(root.djMonitorName)
+  readonly property var djScreen: root.screenNamed(djMonitor ? djMonitor.name : root.djMonitorName)
+  // Before the terminal maps, the dock is up so the terminal tiles beside it.
+  // After that it follows the DJ's workspace, and stays up when Hyprland has
+  // not reported where that is.
+  readonly property bool djDockShown: {
+    if (!djDocked || !djScreen) return false
+    if (!djWindow || !djWorkspace || !djWorkspace.monitor) return true
+    var active = djWorkspace.monitor.activeWorkspace
+    return !active || active.id === djWorkspace.id
+  }
+
+  function screenNamed(name) {
+    var screens = Quickshell.screens
+    for (var i = 0; i < screens.length; i++) {
+      if (screens[i].name === name) return screens[i]
+    }
+    return null
+  }
+
+  function monitorNamed(name) {
+    var monitors = Hyprland.monitors ? Hyprland.monitors.values : []
+    for (var i = 0; i < monitors.length; i++) {
+      if (monitors[i].name === name) return monitors[i]
+    }
+    return null
+  }
+
+  // Hyprland wants 0x-prefixed addresses; Quickshell reports them without.
+  function hyprAddress(address) {
+    var a = String(address || "")
+    if (a.indexOf("0x") !== 0) a = "0x" + a
+    return /^0x[0-9a-f]+$/i.test(a) ? a : ""
+  }
+
+  // The DJ and its dock are one unit: it opens on the first empty workspace
+  // of the focused monitor (Omarchy gives each monitor slots 1-10), and a
+  // second Ask DJ goes back to the one already open. With every slot taken it
+  // opens where you are.
+  function startDj() {
+    if (!root.options.dj || !root.options.djDock) return
+    if (root.djDocked && root.djWindow) {
+      var open = root.hyprAddress(root.djWindow.address)
+      if (open) Hyprland.dispatch('hl.dsp.focus({window = hl.get_window("address:' + open + '")})')
+      return
+    }
+    if (root.djDocked) return
+    Hyprland.dispatch("function() local m = hl.get_active_monitor() if not m then return end "
+      + "for s = 1, 10 do local ws = hl.get_workspace(o.workspaces.workspace_id(m, s)) "
+      + "if not ws or (ws.windows or 0) == 0 then o.workspaces.focus(s)() return end end end")
+    // A DJ terminal already open (from `omacrate dj` in a terminal, say) is
+    // never taken for the new one.
+    var focused = Hyprland.focusedMonitor
+    var known = []
+    var existing = root.djWindowList()
+    for (var i = 0; i < existing.length; i++) known.push(existing[i].address)
+    root.djKnownAddresses = known
+    root.djAddress = ""
+    root.djMonitorName = focused ? focused.name : (Quickshell.screens.length ? Quickshell.screens[0].name : "")
+    // Give the dock a moment to reserve its edge before the terminal maps.
+    djLaunchTimer.restart()
+    djWaitTimer.restart()
+    root.djClosePending = false
+    root.djView = null
+    root.djChanged = ""
+    root.djSince = Math.floor(Date.now() / 1000) - 2
+    root.djDocked = true
+    root.refreshDjPlaylists()
+  }
+
+  function closeDjDock() {
+    djLaunchTimer.stop()
+    djWaitTimer.stop()
+    root.djDocked = false
+    root.djAddress = ""
+    root.djView = null
+    root.djChanged = ""
+    root.djPlaylists = []
+    root.djPlaylistsLoaded = false
+    if (!root.djClosePending) root.djKnownAddresses = []
+  }
+
+  // Closing the dock closes the DJ's terminal too. If the terminal is still
+  // on its way, it is closed when it appears.
+  function closeDj() {
+    var address = root.djWindow ? root.hyprAddress(root.djWindow.address) : ""
+    if (address) {
+      Hyprland.dispatch('hl.dsp.window.close({ window = "address:' + address + '" })')
+    } else if (root.djDocked && !djLaunchTimer.running) {
+      root.djClosePending = true
+      djPendingTimer.restart()
+    }
+    root.closeDjDock()
+  }
+
+  onDjWindowsChanged: {
+    if (root.djClosePending) {
+      for (var j = 0; j < root.djWindows.length; j++) {
+        var late = root.djWindows[j].address
+        if (root.djKnownAddresses.indexOf(late) >= 0) continue
+        var hex = root.hyprAddress(late)
+        if (hex) Hyprland.dispatch('hl.dsp.window.close({ window = "address:' + hex + '" })')
+        root.djClosePending = false
+        djPendingTimer.stop()
+        root.djKnownAddresses = []
+        return
+      }
+    }
+    if (!root.djDocked || djLaunchTimer.running) return
+    if (!root.djAddress) {
+      for (var i = 0; i < root.djWindows.length; i++) {
+        var address = root.djWindows[i].address
+        if (root.djKnownAddresses.indexOf(address) < 0) {
+          root.djAddress = address
+          djWaitTimer.stop()
+          return
+        }
+      }
+    } else {
+      // Read the list itself: djWindow is bound to it and may not have caught
+      // up yet when this handler runs, so it can still name a closed window.
+      for (var k = 0; k < root.djWindows.length; k++) {
+        if (root.djWindows[k].address === root.djAddress) return
+      }
+      root.closeDjDock()
+    }
+  }
+
+  Timer {
+    id: djLaunchTimer
+    interval: 200
+    onTriggered: {
+      // A login shell, so the agent sees the same PATH it would from a terminal.
+      djProc.command = ["bash", "-lc", 'exec "$@"', "bash", root.cli, "dj"]
+      djProc.running = true
+    }
+  }
+
+  // `omacrate dj` reports its own errors; either way, a dock with no terminal
+  // beside it goes away.
+  Timer {
+    id: djWaitTimer
+    interval: 20000
+    onTriggered: if (!root.djAddress) root.closeDjDock()
+  }
+
+  // A terminal that never appears does not keep a close waiting forever.
+  Timer {
+    id: djPendingTimer
+    interval: 20000
+    onTriggered: {
+      root.djClosePending = false
+      root.djKnownAddresses = []
+    }
+  }
+
+  Process {
+    id: djProc
+    running: false
+    onExited: function(code) { if (code !== 0) root.closeDjDock() }
+  }
+
+  // The DJ view is a file `omacrate` replaces after each lookup it runs under
+  // the DJ, so the dock follows the conversation without a timer. It is
+  // watched only while docked. When the DJ saved or changed a playlist, the
+  // playlist list is read again.
+  FileView {
+    id: djViewFile
+    path: root.djDocked ? root.runDir + "/dj-view.json" : ""
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      var next = Model.djView(text(), root.djSince)
+      if (!next) return
+      root.djView = next
+      if (next.changed) {
+        root.djChanged = Model.djMark(root.djChanged, next)
+        root.refreshDjPlaylists()
+      }
+    }
+    onFileChanged: reload()
+  }
+
+  function refreshDjPlaylists() {
+    if (!root.djDocked || !root.linked) return
+    if (djPlaylistsProc.running) {
+      djPlaylistsProc.again = true
+      return
+    }
+    djPlaylistsProc.command = [root.cli, "--json", "playlists"]
+    djPlaylistsProc.running = true
+  }
+
+  Process {
+    id: djPlaylistsProc
+    property bool again: false
+    running: false
+    stdout: StdioCollector { id: djPlaylistsOut; waitForEnd: true }
+    onExited: function(code) {
+      if (!root.djDocked) return
+      if (code === 0) root.djPlaylists = Model.items(String(djPlaylistsOut.text || ""))
+      root.djPlaylistsLoaded = true
+      if (djPlaylistsProc.again) {
+        djPlaylistsProc.again = false
+        Qt.callLater(root.refreshDjPlaylists)
+      }
+    }
+  }
+
+  LazyLoader {
+    active: root.djDocked
+    DjDock {
+      service: root
+    }
   }
 }
