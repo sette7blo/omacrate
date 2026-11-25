@@ -512,10 +512,13 @@ Panel {
       Flickable {
         id: settingsScroller
         width: parent.width
+        // The card caps its height (fittedContentHeight) with its padding and
+        // border included, so they come off after the cap, not before;
+        // otherwise the bottom of the settings hangs out of the card.
         readonly property real panelCap: Math.min(Style.space(720),
-          panel.availableCardHeight > 0 ? panel.availableCardHeight - panel.verticalContentInset : Style.space(720))
-        height: Math.max(0, Math.min(contentHeight,
-          panelCap - hero.height - heroSeparator.height - body.spacing * 2))
+          panel.availableCardHeight > 0 ? panel.availableCardHeight : Style.space(720)) - panel.verticalContentInset
+        height: Math.max(0, Math.floor(Math.min(contentHeight,
+          panelCap - hero.height - heroSeparator.height - body.spacing * 2)))
         visible: root.showSettings
         contentWidth: width
         contentHeight: settingsLoader.implicitHeight
