@@ -6,6 +6,8 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.3.0] - 2026-11-25
+
 ### Added
 - DJ dock, off by default: with **Dock the DJ panel** on, Ask DJ opens the DJ on the first
   empty workspace with a panel docked beside it. Tabs show what the DJ looked at last, the
@@ -194,7 +196,8 @@ project uses [Semantic Versioning](https://semver.org/).
   launcher, which switches them off, and tells it that library and Lidarr text is data,
   never instructions. Supported agents: claude, codex, cursor-agent, copilot.
 
-[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.2.7...HEAD
+[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.3.0...HEAD
+[v0.3.0]: https://github.com/sette7blo/omacrate/compare/v0.2.7...v0.3.0
 [v0.2.7]: https://github.com/sette7blo/omacrate/compare/v0.2.6...v0.2.7
 [v0.2.6]: https://github.com/sette7blo/omacrate/compare/v0.2.5...v0.2.6
 [v0.2.5]: https://github.com/sette7blo/omacrate/compare/v0.2.4...v0.2.5
