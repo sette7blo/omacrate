@@ -272,6 +272,16 @@ function playlistRows(list, changed) {
   return out
 }
 
+// The playlist to mark after a DJ view. A saved or changed playlist is marked;
+// a deleted one (a playlists view) is not, and a mark on it goes, so an
+// earlier mark survives the DJ replacing a playlist by saving a new one and
+// deleting the old.
+function djMark(current, view) {
+  if (!view || !view.changed) return current || ""
+  if (view.within === "playlist") return view.changed
+  return current === view.changed ? "" : (current || "")
+}
+
 var VIEW_WITHIN = ["search", "artists", "recent", "artist", "playlist", "playlists"]
 
 // What the DJ looked at last, from the file `omacrate` writes under the DJ.
@@ -479,7 +489,7 @@ if (typeof module !== "undefined" && module.exports) {
     text: text, clock: clock, settings: settings, pluginSettings: pluginSettings,
     settingsPayload: settingsPayload, linkInfo: linkInfo, sameLink: sameLink,
     linkSummary: linkSummary, isKey: isKey, lidarrCleartext: lidarrCleartext, item: item, items: items, parseQueue: parseQueue,
-    rows: rows, queueRows: queueRows, dockTabs: dockTabs, playlistsByChange: playlistsByChange, playlistRows: playlistRows, djView: djView, tabs: tabs, nextTab: nextTab, tabRequest: tabRequest,
+    rows: rows, queueRows: queueRows, dockTabs: dockTabs, playlistsByChange: playlistsByChange, playlistRows: playlistRows, djView: djView, djMark: djMark, tabs: tabs, nextTab: nextTab, tabRequest: tabRequest,
     usersRequest: usersRequest, listRequest: listRequest,
     playArgs: playArgs, addArgs: addArgs, userRows: userRows, userArgs: userArgs, hints: hints, mpvLine: mpvLine,
     mpvSubscribe: mpvSubscribe, mpvEvent: mpvEvent, volumeStep: volumeStep, volumeGlyph: volumeGlyph, barLabel: barLabel, nowLine: nowLine,

@@ -300,3 +300,13 @@ test("the DJ view is checked like any list and ignored when stale", function() {
   assert.equal(M.djView({ within: "playlist", changed: "playlist:9", at: 1, items: [] }, 0).changed, "playlist:9")
   assert.deepEqual(M.dockTabs(3).map(function(t) { return t.label }), ["DJ", "Playlists", "Library", "Queue 3"])
 })
+
+test("the dock keeps the mark when the DJ replaces a playlist", function() {
+  const saved = { within: "playlist", changed: "playlist:902" }
+  const deleted = { within: "playlists", changed: "playlist:901" }
+  assert.equal(M.djMark("", saved), "playlist:902")
+  assert.equal(M.djMark("playlist:902", deleted), "playlist:902")
+  assert.equal(M.djMark("playlist:901", deleted), "")
+  assert.equal(M.djMark("playlist:902", { within: "search", changed: "" }), "playlist:902")
+  assert.equal(M.djMark(undefined, null), "")
+})

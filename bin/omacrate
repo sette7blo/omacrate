@@ -524,6 +524,7 @@ cmd_playlist() {
       fi
       plex_upload "/library/metadata/${target#playlist:}/posters" "$mime" "$file"
       if $JSON; then jq -cn --arg k "$target" '{key: $k, artwork: true}'; else echo "Set the artwork of $target"; fi
+      dj_show_playlist "$target" "Cover set"
       ;;
     *) die "usage: omacrate playlist create <title> <key>... | add <playlist key> <key>... | delete <playlist key> | art <playlist key> <image file>" ;;
   esac

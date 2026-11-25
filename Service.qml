@@ -665,7 +665,12 @@ Item {
           return
         }
       }
-    } else if (!root.djWindow) {
+    } else {
+      // Read the list itself: djWindow is bound to it and may not have caught
+      // up yet when this handler runs, so it can still name a closed window.
+      for (var k = 0; k < root.djWindows.length; k++) {
+        if (root.djWindows[k].address === root.djAddress) return
+      }
       root.closeDjDock()
     }
   }
@@ -718,7 +723,7 @@ Item {
       if (!next) return
       root.djView = next
       if (next.changed) {
-        root.djChanged = next.changed
+        root.djChanged = Model.djMark(root.djChanged, next)
         root.refreshDjPlaylists()
       }
     }
