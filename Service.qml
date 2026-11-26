@@ -81,6 +81,8 @@ Item {
   property bool agentReady: false
   // Why the DJ cannot open an agent, shown in the settings.
   property string agentNote: ""
+  // The default agent's name once it is ready (codex cannot pre-approve).
+  property string agentName: ""
 
   function checkAgent() {
     if (!root.options.dj) {
@@ -487,6 +489,7 @@ Item {
       try { data = JSON.parse(String(statusOut.text || "")) } catch (e) { data = null }
       root.agentReady = code === 0 && !!data && data.agent === true
       root.agentNote = !root.agentReady && data && typeof data.agentNote === "string" ? Model.text(data.agentNote, 200) : ""
+      root.agentName = root.agentReady && typeof data.agentName === "string" ? Model.text(data.agentName, 40) : ""
     }
   }
 
@@ -680,7 +683,7 @@ Item {
     interval: 200
     onTriggered: {
       // A login shell, so the agent sees the same PATH it would from a terminal.
-      djProc.command = ["bash", "-lc", 'exec "$@"', "bash", root.cli, "dj"]
+      djProc.command = ["bash", "-lc", 'exec "$@"', "bash", root.cli].concat(Model.djArgs(root.options))
       djProc.running = true
     }
   }
