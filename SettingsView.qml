@@ -320,6 +320,30 @@ Column {
       onClicked: if (root.service) root.service.persistSettings({ djDock: !root.options.djDock })
     }
 
+    // A pre-approval for the DJ's session only: omacrate-read runs lookups and
+    // playback and nothing else. Changes to the server always ask.
+    Toggle {
+      width: parent.width
+      visible: root.options.dj
+      label: "Look up and play without asking"
+      description: "The DJ searches your library and plays music without a prompt. Saving, changing or deleting a playlist, a library scan and Lidarr still ask."
+      checked: root.options.djRead
+      foreground: root.foreground
+      accent: root.accent
+      fontFamily: root.fontFamily
+      onClicked: if (root.service) root.service.persistSettings({ djRead: !root.options.djRead })
+    }
+    Text {
+      textFormat: Text.PlainText
+      width: parent.width
+      visible: root.options.dj && root.options.djRead && root.service && root.service.agentName === "codex"
+      text: "Codex cannot pre-approve commands, so it always asks."
+      color: root.dim
+      wrapMode: Text.WordWrap
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+    }
+
     // A second yes, so the agent's provider does not learn what you download
     // or that Lidarr is there unless you want it to. It does not hide the key
     // from an agent running as the user; the description says so.

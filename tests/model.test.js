@@ -215,9 +215,9 @@ test("the last line of an error is what the panel shows", function() {
 })
 
 test("settings default to showing the title", function() {
-  assert.deepEqual(M.settings(null), { showTitle: true, dj: false, djDock: false })
-  assert.deepEqual(M.settings({ showTitle: false }), { showTitle: false, dj: false, djDock: false })
-  assert.deepEqual(M.settings({ showTitle: "no" }), { showTitle: true, dj: false, djDock: false })
+  assert.deepEqual(M.settings(null), { showTitle: true, dj: false, djDock: false, djRead: false })
+  assert.deepEqual(M.settings({ showTitle: false }), { showTitle: false, dj: false, djDock: false, djRead: false })
+  assert.deepEqual(M.settings({ showTitle: "no" }), { showTitle: true, dj: false, djDock: false, djRead: false })
 })
 
 test("the DJ is off unless the bar entry turns it on", function() {
@@ -227,12 +227,17 @@ test("the DJ is off unless the bar entry turns it on", function() {
   assert.equal(M.settings({ djDock: "yes" }).djDock, false)
   assert.equal(M.settings({ djDock: true }).djDock, true)
   assert.equal(M.settingsPayload({ dj: true, djDock: true }).djDock, true)
+  assert.equal(M.settings({ djRead: "yes" }).djRead, false)
+  assert.equal(M.settingsPayload({ djRead: true }).djRead, true)
+  assert.deepEqual(M.djArgs(null), ["dj"])
+  assert.deepEqual(M.djArgs({ djRead: "yes" }), ["dj"])
+  assert.deepEqual(M.djArgs({ djRead: true }), ["dj", "--allow-read"])
   const config = { bar: { layout: { left: [{ id: "omarchy.menu" }], centerEnd: [{ id: M.PLUGIN_ID, dj: true, showTitle: false }] } } }
-  assert.deepEqual(M.pluginSettings(config), { showTitle: false, dj: true, djDock: false })
-  assert.deepEqual(M.pluginSettings({ bar: { layout: { right: [{ id: M.PLUGIN_ID }] } } }), { showTitle: true, dj: false, djDock: false })
-  assert.deepEqual(M.pluginSettings(null), { showTitle: true, dj: false, djDock: false })
-  assert.deepEqual(M.pluginSettings({ bar: { layout: { right: "x" } } }), { showTitle: true, dj: false, djDock: false })
-  assert.deepEqual(M.settingsPayload({ dj: true }), { id: M.PLUGIN_ID, showTitle: true, dj: true, djDock: false })
+  assert.deepEqual(M.pluginSettings(config), { showTitle: false, dj: true, djDock: false, djRead: false })
+  assert.deepEqual(M.pluginSettings({ bar: { layout: { right: [{ id: M.PLUGIN_ID }] } } }), { showTitle: true, dj: false, djDock: false, djRead: false })
+  assert.deepEqual(M.pluginSettings(null), { showTitle: true, dj: false, djDock: false, djRead: false })
+  assert.deepEqual(M.pluginSettings({ bar: { layout: { right: "x" } } }), { showTitle: true, dj: false, djDock: false, djRead: false })
+  assert.deepEqual(M.settingsPayload({ dj: true }), { id: M.PLUGIN_ID, showTitle: true, dj: true, djDock: false, djRead: false })
   // The service must not look for an agent while the DJ is off.
   const service = fs.readFileSync(path.join(__dirname, "..", "Service.qml"), "utf8")
   assert.match(service, /function checkAgent\(\) \{\s+if \(!root\.options\.dj\)/)

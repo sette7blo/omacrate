@@ -10,6 +10,11 @@ never ask for it, read `credentials.json`, or call the Plex API yourself.
 
 Looking things up and playing music needs no confirmation.
 
+`omacrate-read`, next to `omacrate` in the plugin's `bin` folder, takes the
+same reading and playing commands shown below and nothing else. When you are
+given its path (the DJ is), use it for those commands, so they can run
+without a prompt.
+
 ## Reading
 
 Add `--json` right after `omacrate` for machine-readable output. Every item

@@ -327,7 +327,7 @@ Panel {
   function askDj() {
     if (!root.cli) return
     if (root.service && root.service.options.djDock) root.service.startDj()
-    else Util.execArgv([root.cli, "dj"])
+    else Util.execArgv([root.cli].concat(Model.djArgs(root.service ? root.service.options : null)))
     close()
   }
 

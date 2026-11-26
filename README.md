@@ -123,7 +123,8 @@ The gear in the header opens the settings:
   yet. See [Lidarr](#lidarr-optional).
 - **Bar**: show or hide the track title next to the note.
 - **AI DJ**: off by default, and Lidarr is a second, separate yes for it.
-  The DJ dock is a third switch, also off. See [DJ](#dj).
+  The DJ dock and **Look up and play without asking** are further switches,
+  also off. See [DJ](#dj).
 
 ### Plex Home users
 
@@ -182,6 +183,28 @@ and needs no setting, since typing it is asking for it.
 omacrate dj
 omacrate dj "an hour of mellow funk for cooking"
 ```
+
+### Look up and play without asking
+
+The DJ opens with the agent's normal permission prompts, so every lookup asks
+first, often a dozen times for one playlist. **Look up and play without
+asking** (off by default) pre-approves one command for the DJ's session:
+`bin/omacrate-read`, which runs lookups (`search`, `artists`, `albums`,
+`tracks`, `recent`, `playlists`, `now`, `queue`) and playback (`play`, `add`,
+`pause`, `resume`, `toggle`, `next`, `prev`, `stop`, `seek`, `volume`) and
+refuses everything else. Anything that changes your Plex server or Lidarr
+(saving, changing or deleting a playlist, artwork, a library scan, adding an
+artist) goes through `omacrate` itself and still asks. There is no switch to
+pre-approve those: the DJ reads text other people wrote (file tags,
+MusicBrainz), so changes stay where you see them.
+
+The approval is passed for the DJ's session only, by full path, so nothing
+else the agent wants to run is approved: claude gets `--allowedTools`, copilot
+`--allow-tool`, and cursor-agent an allow list in
+`~/.local/state/omarchy/omacrate/dj/.cursor/cli.json`, the folder it starts in.
+Your own agent settings are not touched. Codex has no per-command approval, so
+with codex the DJ still asks. In a terminal, `omacrate dj --allow-read` does
+the same.
 
 ### DJ dock
 

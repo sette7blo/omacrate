@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# The DJ's lookups and playback, and nothing else: one command an agent can be
+# allowed to run without asking. Anything that changes the Plex server, Lidarr
+# or the login goes through omacrate itself, which keeps its prompt.
+# Usage: omacrate-read [--json] <command> [args]
+set -euo pipefail
+cli="$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/omacrate"
+flags=()
+[[ "${1:-}" == --json ]] && { flags+=(--json); shift; }
+case "${1:-}" in
+  search|artists|albums|tracks|recent|playlists|now|queue) ;;
+  play|add|pause|resume|toggle|next|prev|stop|seek|volume) ;;
+  *)
+    echo "omacrate-read: only lookups (search, artists, albums, tracks, recent, playlists, now, queue) and playback (play, add, pause, resume, toggle, next, prev, stop, seek, volume). Use omacrate for anything else." >&2
+    exit 2 ;;
+esac
+exec "$cli" "${flags[@]}" "$@"

@@ -6,6 +6,19 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Look up and play without asking**, a DJ switch in Settings, off by default. It
+  pre-approves `bin/omacrate-read` for the DJ's session only (claude, cursor-agent,
+  copilot; codex still asks), so searching the library and playing music no longer ask
+  each time. `omacrate-read` runs lookups and playback and refuses everything else;
+  playlist changes, artwork, library scans and Lidarr still ask. `omacrate dj
+  --allow-read` does the same from a terminal.
+- `omacrate --json status` names the default agent (`agentName`).
+
+### Changed
+- The DJ runs lookups and playback through `omacrate-read`, with or without the switch.
+  cursor-agent now starts in the DJ's own folder, `~/.local/state/omarchy/omacrate/dj`.
+
 ## [v0.3.0] - 2026-11-25
 
 ### Added

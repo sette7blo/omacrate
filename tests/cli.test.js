@@ -666,6 +666,15 @@ test("the DJ opens the agent with its own permission prompts, never a bypass fla
   for (const flag of ["--yolo", "--trust", "--approve-for-me", "--allow-all", "--auto", "--permission-mode", "--dangerously-skip-permissions"])
     assert.equal(argv.indexOf(flag), -1, flag)
 
+  // Lookups and playback go through omacrate-read; without the switch nothing is approved.
+  const readCmd = path.join(path.dirname(fs.realpathSync(CLI)), "omacrate-read")
+  assert.ok(prompt.indexOf(readCmd) !== -1, "the prompt does not name omacrate-read")
+  assert.equal(argv.indexOf("--allowedTools"), -1)
+  // Codex has no per-command approval: --allow-read changes nothing there.
+  argv = await launch(["dj", "--allow-read", "x"])
+  assert.equal(argv[argv.indexOf("codex") + 1], "--")
+  assert.match(argv[argv.indexOf("codex") + 2], /My request: x$/)
+
   ok(["lidarr", "dj", "on"])
   argv = await launch(["dj"])
   prompt = argv[argv.indexOf("codex") + 2]
@@ -673,4 +682,68 @@ test("the DJ opens the agent with its own permission prompts, never a bypass fla
   assert.match(prompt, /adding an artist to Lidarr/)
   assert.doesNotMatch(prompt, /Do not try to download/)
   ok(["lidarr", "dj", "off"])
+})
+
+test("omacrate-read runs lookups and playback and refuses everything else", function() {
+  const READ = path.join(__dirname, "..", "bin", "omacrate-read")
+  const read = function(args) {
+    const out = spawnSync(READ, args, { env: env, encoding: "utf8", timeout: 60000 })
+    return { code: out.status, out: out.stdout.trim(), err: out.stderr.trim() }
+  }
+  for (const args of [["playlist", "create", "x", "300"], ["playlist", "delete", "playlist:900"], ["scan"],
+    ["lidarr", "status"], ["login", "--start"], ["logout"], ["user"], ["server"], ["dj"], ["panel"], ["prepare"],
+    ["--connection", "a/b/c", "now"], ["--json", "--json", "now"], ["--json", "scan"], []]) {
+    const r = read(args)
+    assert.equal(r.code, 2, args.join(" "))
+    assert.match(r.err, /only lookups/)
+  }
+  // Passes the command through: the same answer and exit code as omacrate.
+  for (const args of [["--json", "now"], ["queue"], ["search", "air"]]) {
+    const a = read(args), b = run(args)
+    assert.equal(a.code, b.code, args.join(" "))
+    assert.equal(a.out, b.out, args.join(" "))
+  }
+})
+
+test("the read switch pre-approves only omacrate-read, per agent", async function() {
+  const bin = fs.mkdtempSync(path.join(tmp, "agentbin-"))
+  const record = path.join(bin, "launched")
+  const script = function(name, body) { fs.writeFileSync(path.join(bin, name), "#!/bin/sh\n" + body + "\n", { mode: 0o755 }) }
+  script("omarchy-default-agent", 'cat "' + bin + '/agent"')
+  script("omarchy-launch-tui", 'pwd > "' + bin + '/cwd"; for a in "$@"; do printf "%s\\n" "$a"; done > "' + record + '"')
+  for (const name of ["claude", "copilot", "cursor-agent"]) script(name, "exit 0")
+  const readCmd = path.join(path.dirname(fs.realpathSync(CLI)), "omacrate-read")
+  const djDir = path.join(env.XDG_STATE_HOME, "omarchy", "omacrate", "dj")
+  const launch = async function(agent, args) {
+    fs.writeFileSync(path.join(bin, "agent"), agent)
+    fs.rmSync(record, { force: true })
+    const out = spawnSync(CLI, args, { env: Object.assign({}, env, { PATH: bin + ":" + process.env.PATH, HOME: tmp }), encoding: "utf8" })
+    assert.equal(out.status, 0, out.stderr)
+    let argv = null
+    for (let i = 0; i < 40 && !argv; i++) {
+      await sleep(50)
+      if (fs.existsSync(record)) argv = fs.readFileSync(record, "utf8").trim().split("\n")
+    }
+    assert.ok(argv, "the agent window was not opened")
+    return argv.slice(argv.indexOf(agent))
+  }
+
+  let argv = await launch("claude", ["dj"])
+  assert.equal(argv[1], "--")
+  argv = await launch("claude", ["dj", "--allow-read"])
+  assert.deepEqual(argv.slice(1, 4), ["--allowedTools", "Bash(" + readCmd + ":*)", "--"])
+
+  argv = await launch("copilot", ["dj"])
+  assert.equal(argv[1], "--interactive")
+  argv = await launch("copilot", ["dj", "--allow-read"])
+  assert.deepEqual(argv.slice(1, 4), ["--allow-tool", "shell(" + readCmd + ")", "--interactive"])
+
+  const list = function() { return JSON.parse(fs.readFileSync(path.join(djDir, ".cursor", "cli.json"), "utf8")).permissions.allow }
+  argv = await launch("cursor-agent", ["dj", "--allow-read"])
+  assert.deepEqual(argv.slice(1, 3), ["agent", "--"])
+  assert.deepEqual(list(), ["Shell(" + readCmd + ")"])
+  assert.equal(fs.readFileSync(path.join(bin, "cwd"), "utf8").trim(), djDir)
+  // Switched off, the list is emptied, so the approval does not outlive the switch.
+  await launch("cursor-agent", ["dj"])
+  assert.deepEqual(list(), [])
 })

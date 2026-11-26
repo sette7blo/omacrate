@@ -50,7 +50,8 @@ function settings(raw) {
   // The DJ is the one feature that involves an AI agent. It is off until the
   // user turns it on.
   // The dock beside the DJ terminal is a second choice, also off by default.
-  return { showTitle: data.showTitle !== false, dj: data.dj === true, djDock: data.djDock === true }
+  // djRead lets the DJ look up and play without a prompt; also off by default.
+  return { showTitle: data.showTitle !== false, dj: data.dj === true, djDock: data.djDock === true, djRead: data.djRead === true }
 }
 
 // The widget's own entry in shell.json holds its settings.
@@ -69,7 +70,12 @@ function pluginSettings(config) {
 
 function settingsPayload(raw) {
   var data = settings(raw)
-  return { id: PLUGIN_ID, showTitle: data.showTitle, dj: data.dj, djDock: data.djDock }
+  return { id: PLUGIN_ID, showTitle: data.showTitle, dj: data.dj, djDock: data.djDock, djRead: data.djRead }
+}
+
+// The arguments for `omacrate dj`, from the settings.
+function djArgs(options) {
+  return options && options.djRead === true ? ["dj", "--allow-read"] : ["dj"]
 }
 
 // The panel's volume slider works in steps of five, from 0 to 100.
@@ -487,7 +493,7 @@ if (typeof module !== "undefined" && module.exports) {
     PLUGIN_ID: PLUGIN_ID, MAX_TEXT: MAX_TEXT, MAX_ROWS: MAX_ROWS, MAX_QUEUE: MAX_QUEUE,
     TIME_REQUEST: TIME_REQUEST,
     text: text, clock: clock, settings: settings, pluginSettings: pluginSettings,
-    settingsPayload: settingsPayload, linkInfo: linkInfo, sameLink: sameLink,
+    settingsPayload: settingsPayload, djArgs: djArgs, linkInfo: linkInfo, sameLink: sameLink,
     linkSummary: linkSummary, isKey: isKey, lidarrCleartext: lidarrCleartext, item: item, items: items, parseQueue: parseQueue,
     rows: rows, queueRows: queueRows, dockTabs: dockTabs, playlistsByChange: playlistsByChange, playlistRows: playlistRows, djView: djView, djMark: djMark, tabs: tabs, nextTab: nextTab, tabRequest: tabRequest,
     usersRequest: usersRequest, listRequest: listRequest,
