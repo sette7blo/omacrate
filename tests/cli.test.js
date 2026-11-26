@@ -669,6 +669,7 @@ test("the DJ opens the agent with its own permission prompts, never a bypass fla
   // Lookups and playback go through omacrate-read; without the switch nothing is approved.
   const readCmd = path.join(path.dirname(fs.realpathSync(CLI)), "omacrate-read")
   assert.ok(prompt.indexOf(readCmd) !== -1, "the prompt does not name omacrate-read")
+  assert.match(prompt, /one per call: no &&/)
   assert.equal(argv.indexOf("--allowedTools"), -1)
   // Codex has no per-command approval: --allow-read changes nothing there.
   argv = await launch(["dj", "--allow-read", "x"])

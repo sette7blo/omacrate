@@ -12,7 +12,8 @@ project uses [Semantic Versioning](https://semver.org/).
   copilot; codex still asks), so searching the library and playing music no longer ask
   each time. `omacrate-read` runs lookups and playback and refuses everything else;
   playlist changes, artwork, library scans and Lidarr still ask. `omacrate dj
-  --allow-read` does the same from a terminal.
+  --allow-read` does the same from a terminal. The DJ is told to run one command per
+  call, since a chained line (`... && echo --- && ...`) asks again.
 - `omacrate --json status` names the default agent (`agentName`).
 
 ### Changed

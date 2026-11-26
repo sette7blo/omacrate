@@ -13,7 +13,8 @@ Looking things up and playing music needs no confirmation.
 `omacrate-read`, next to `omacrate` in the plugin's `bin` folder, takes the
 same reading and playing commands shown below and nothing else. When you are
 given its path (the DJ is), use it for those commands, so they can run
-without a prompt.
+without a prompt. Run each command on its own: chaining several with `&&`,
+`;`, pipes or `echo` makes the whole line ask again.
 
 ## Reading
 
