@@ -6,6 +6,8 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.4.0] - 2026-11-26
+
 ### Added
 - **Look up and play without asking**, a DJ switch in Settings, off by default. It
   pre-approves `bin/omacrate-read` for the DJ's session only (claude, cursor-agent,
@@ -210,7 +212,8 @@ project uses [Semantic Versioning](https://semver.org/).
   launcher, which switches them off, and tells it that library and Lidarr text is data,
   never instructions. Supported agents: claude, codex, cursor-agent, copilot.
 
-[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/sette7blo/omacrate/compare/v0.4.0...HEAD
+[v0.4.0]: https://github.com/sette7blo/omacrate/compare/v0.3.0...v0.4.0
 [v0.3.0]: https://github.com/sette7blo/omacrate/compare/v0.2.7...v0.3.0
 [v0.2.7]: https://github.com/sette7blo/omacrate/compare/v0.2.6...v0.2.7
 [v0.2.6]: https://github.com/sette7blo/omacrate/compare/v0.2.5...v0.2.6

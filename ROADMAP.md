@@ -2,15 +2,15 @@
 
 ## Where we are
 
-v0.2.7 released 2026-11-19 and listed on the Omarchy plugin marketplace (#15215, approved
-2026-11-24). The CLI is covered by tests against a stand-in server, and the plugin is used
-daily against a real Plex server with Lidarr and the DJ. On `main` since v0.2.7: the panel
-no longer has playlist artwork and delete buttons (the DJ and the CLI keep both).
+v0.4.0 released 2026-11-26: DJ dock (v0.3.0) and the "Look up and play without asking"
+switch. The marketplace listing (#15215, approved 2026-11-24) is still at v0.2.7. The CLI
+is covered by tests against a stand-in server, and the plugin is used daily against a real
+Plex server with Lidarr and the DJ.
 
 ## Next, in order
 
-1. DJ dock beside the DJ terminal (#11), then release and send a marketplace [Verify]
-   update after running the marketplace security baseline on the files.
+1. Run the marketplace security baseline on v0.4.0, then send one [Verify] update for
+   v0.3.0 and v0.4.0.
 2. Try the DJ with the other supported agents (claude, codex, copilot).
 3. Translations: move the panel strings into `i18n/en.json`.
 
